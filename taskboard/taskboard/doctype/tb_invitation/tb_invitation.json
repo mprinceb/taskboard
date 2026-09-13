@@ -1,0 +1,68 @@
+{
+  "doctype": "DocType",
+  "name": "TB Invitation",
+  "module": "Taskboard",
+  "custom": 0,
+  "issingle": 0,
+  "autoname": "hash",
+  "engine": "InnoDB",
+  "field_order": [
+    "email",
+    "role",
+    "token_hash",
+    "expires_at",
+    "status",
+    "invited_by"
+  ],
+  "fields": [
+    {
+      "fieldname": "email",
+      "fieldtype": "Data",
+      "label": "Email",
+      "reqd": 1
+    },
+    {
+      "fieldname": "role",
+      "fieldtype": "Select",
+      "label": "Role",
+      "options": "Admin\nMember",
+      "default": "Member"
+    },
+    {
+      "fieldname": "token_hash",
+      "fieldtype": "Data",
+      "label": "Token Hash",
+      "unique": 1,
+      "hidden": 1
+    },
+    {
+      "fieldname": "expires_at",
+      "fieldtype": "Datetime",
+      "label": "Expires At"
+    },
+    {
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "label": "Status",
+      "options": "Pending\nAccepted\nRevoked",
+      "default": "Pending"
+    },
+    {
+      "fieldname": "invited_by",
+      "fieldtype": "Link",
+      "label": "Invited By",
+      "options": "User"
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 0
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC"
+}

@@ -1,0 +1,19 @@
+[Unit]
+Description=Taskboard Frappe web application
+After=network-online.target mariadb.service taskboard-redis-cache.service taskboard-redis-queue.service
+Wants=network-online.target
+Requires=taskboard-redis-cache.service taskboard-redis-queue.service
+
+[Service]
+Type=simple
+User=frappe
+Group=frappe
+WorkingDirectory=/srv/frappe-bench
+Environment=TASKBOARD_SITE=YOUR_SITE
+ExecStart=/srv/frappe-bench/env/bin/gunicorn --bind 127.0.0.1:8016 --workers 2 --timeout 180 --access-logfile /srv/frappe-bench/logs/taskboard-access.log --error-logfile /srv/frappe-bench/logs/taskboard-web.log taskboard.wsgi:application
+Restart=on-failure
+RestartSec=5
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

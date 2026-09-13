@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Taskboard notifications every minute
+
+[Timer]
+OnBootSec=60
+OnUnitInactiveSec=60
+Unit=taskboard-notifications.service
+
+[Install]
+WantedBy=timers.target

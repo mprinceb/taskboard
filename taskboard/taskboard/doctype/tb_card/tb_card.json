@@ -1,0 +1,88 @@
+{
+  "doctype": "DocType",
+  "name": "TB Card",
+  "module": "Taskboard",
+  "custom": 0,
+  "issingle": 0,
+  "autoname": "hash",
+  "engine": "InnoDB",
+  "field_order": [
+    "title",
+    "description",
+    "list_id",
+    "position",
+    "start_date",
+    "due_date",
+    "completed",
+    "archived"
+  ],
+  "fields": [
+    {
+      "fieldname": "title",
+      "fieldtype": "Data",
+      "label": "Title",
+      "reqd": 1,
+      "length": 500
+    },
+    {
+      "fieldname": "description",
+      "fieldtype": "Long Text",
+      "label": "Description"
+    },
+    {
+      "fieldname": "list_id",
+      "fieldtype": "Link",
+      "label": "List Id",
+      "options": "TB List",
+      "reqd": 1
+    },
+    {
+      "fieldname": "position",
+      "fieldtype": "Float",
+      "label": "Position",
+      "default": 0
+    },
+    {
+      "fieldname": "start_date",
+      "fieldtype": "Date",
+      "label": "Start Date"
+    },
+    {
+      "fieldname": "due_date",
+      "fieldtype": "Date",
+      "label": "Due Date"
+    },
+    {
+      "fieldname": "completed",
+      "fieldtype": "Check",
+      "label": "Completed",
+      "read_only": 1
+    },
+    {
+      "fieldname": "archived",
+      "fieldtype": "Check",
+      "label": "Archived"
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 0
+    },
+    {
+      "role": "Taskboard Member",
+      "read": 1
+    },
+    {
+      "role": "Taskboard Admin",
+      "read": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "title_field": "title",
+  "track_changes": 1
+}

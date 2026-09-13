@@ -1,0 +1,13 @@
+[Unit]
+Description=Process Taskboard notifications only
+After=mariadb.service taskboard-redis-cache.service taskboard-redis-queue.service
+Requires=taskboard-redis-cache.service taskboard-redis-queue.service
+
+[Service]
+Type=oneshot
+User=frappe
+Group=frappe
+WorkingDirectory=/srv/frappe-bench
+ExecStart=/srv/frappe-bench/env/bin/python -m taskboard.service --site YOUR_SITE
+TimeoutStartSec=300
+UMask=0027

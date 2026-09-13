@@ -1,0 +1,58 @@
+{
+  "doctype": "DocType",
+  "name": "TB List",
+  "module": "Taskboard",
+  "custom": 0,
+  "issingle": 0,
+  "autoname": "hash",
+  "engine": "InnoDB",
+  "field_order": [
+    "title",
+    "position",
+    "is_done",
+    "archived"
+  ],
+  "fields": [
+    {
+      "fieldname": "title",
+      "fieldtype": "Data",
+      "label": "Title",
+      "reqd": 1
+    },
+    {
+      "fieldname": "position",
+      "fieldtype": "Float",
+      "label": "Position",
+      "default": 0
+    },
+    {
+      "fieldname": "is_done",
+      "fieldtype": "Check",
+      "label": "Is Done"
+    },
+    {
+      "fieldname": "archived",
+      "fieldtype": "Check",
+      "label": "Archived"
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 0
+    },
+    {
+      "role": "Taskboard Member",
+      "read": 1
+    },
+    {
+      "role": "Taskboard Admin",
+      "read": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC"
+}

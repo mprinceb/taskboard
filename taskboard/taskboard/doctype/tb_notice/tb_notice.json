@@ -1,0 +1,85 @@
+{
+  "doctype": "DocType",
+  "name": "TB Notice",
+  "module": "Taskboard",
+  "custom": 0,
+  "issingle": 0,
+  "autoname": "hash",
+  "engine": "InnoDB",
+  "field_order": [
+    "recipient",
+    "kind",
+    "subject",
+    "body",
+    "card",
+    "invitation",
+    "event_key",
+    "state",
+    "seen"
+  ],
+  "fields": [
+    {
+      "fieldname": "recipient",
+      "fieldtype": "Data",
+      "label": "Recipient",
+      "reqd": 1
+    },
+    {
+      "fieldname": "kind",
+      "fieldtype": "Select",
+      "label": "Kind",
+      "options": "Invitation\nAssignment\nMention\nReminder"
+    },
+    {
+      "fieldname": "subject",
+      "fieldtype": "Data",
+      "label": "Subject"
+    },
+    {
+      "fieldname": "body",
+      "fieldtype": "Long Text",
+      "label": "Body"
+    },
+    {
+      "fieldname": "card",
+      "fieldtype": "Link",
+      "label": "Card",
+      "options": "TB Card"
+    },
+    {
+      "fieldname": "invitation",
+      "fieldtype": "Link",
+      "label": "Invitation",
+      "options": "TB Invitation"
+    },
+    {
+      "fieldname": "event_key",
+      "fieldtype": "Data",
+      "label": "Event Key",
+      "unique": 1
+    },
+    {
+      "fieldname": "state",
+      "fieldtype": "Select",
+      "label": "State",
+      "options": "Pending\nQueued\nSkipped",
+      "default": "Pending"
+    },
+    {
+      "fieldname": "seen",
+      "fieldtype": "Check",
+      "label": "Seen"
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 0
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC"
+}

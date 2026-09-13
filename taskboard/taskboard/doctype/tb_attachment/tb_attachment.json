@@ -1,0 +1,54 @@
+{
+  "doctype": "DocType",
+  "name": "TB Attachment",
+  "module": "Taskboard",
+  "custom": 0,
+  "issingle": 0,
+  "autoname": "hash",
+  "engine": "InnoDB",
+  "field_order": [
+    "card",
+    "file",
+    "comment",
+    "removed"
+  ],
+  "fields": [
+    {
+      "fieldname": "card",
+      "fieldtype": "Link",
+      "label": "Card",
+      "options": "TB Card",
+      "reqd": 1
+    },
+    {
+      "fieldname": "file",
+      "fieldtype": "Link",
+      "label": "File",
+      "options": "File",
+      "reqd": 1,
+      "unique": 1
+    },
+    {
+      "fieldname": "comment",
+      "fieldtype": "Link",
+      "label": "Comment",
+      "options": "Comment"
+    },
+    {
+      "fieldname": "removed",
+      "fieldtype": "Check",
+      "label": "Removed"
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 0
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC"
+}

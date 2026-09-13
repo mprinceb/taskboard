@@ -1,0 +1,8 @@
+node_modules/
+__pycache__/
+*.pyc
+*.egg-info/
+.env
+.taskboard-test*
+*.tsbuildinfo
+.ruff_cache/

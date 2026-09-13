@@ -1,0 +1,46 @@
+{
+  "doctype": "DocType",
+  "name": "TB Settings",
+  "module": "Taskboard",
+  "custom": 0,
+  "issingle": 1,
+  "autoname": "hash",
+  "engine": "InnoDB",
+  "field_order": [
+    "board_title",
+    "max_upload_mb",
+    "reminder_days"
+  ],
+  "fields": [
+    {
+      "fieldname": "board_title",
+      "fieldtype": "Data",
+      "label": "Board Title",
+      "default": "Task Tracking",
+      "reqd": 1
+    },
+    {
+      "fieldname": "max_upload_mb",
+      "fieldtype": "Int",
+      "label": "Max Upload Mb",
+      "default": 40
+    },
+    {
+      "fieldname": "reminder_days",
+      "fieldtype": "Int",
+      "label": "Reminder Days",
+      "default": 1
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 0
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC"
+}
