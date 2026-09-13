@@ -64,7 +64,7 @@ Descriptions/comments use Markdown rendered without raw HTML. Mention tokens use
 
 ## Development
 
-Frontend source is in `frontend/src`. Build output is under `taskboard/public/ui` and served by `taskboard/www/taskboard.html`. Build timestamps invalidate browser asset caches.
+Frontend source is in `frontend/src`. For development, run `npm run dev` in `frontend` to rebuild on changes, then refresh the Frappe-served page; this preserves same-origin sessions and CSRF protection without a second authentication setup. Build output is under `taskboard/public/ui` and served by `taskboard/www/taskboard.html`. Build timestamps invalidate browser asset caches.
 
 Core DocTypes: TB Settings, TB List, TB Card, TB Member, TB Invitation, TB Notice, TB Attachment. Assignments use native ToDo records; comments and file contents use native Comment and File records.
 
