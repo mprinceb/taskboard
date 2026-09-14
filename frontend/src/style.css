@@ -2072,9 +2072,12 @@ progress {
 }
 .card-open-area .card-title {
   min-height: 20px;
-  transition: padding 120ms ease;
+  padding-left: 23px;
+  padding-right: 40px;
+  transform: translateX(-23px);
+  transition: transform var(--motion-control) var(--motion-ease);
 }
-.card-complete-control {
+.movable-card .card-complete-control {
   position: absolute;
   left: 10px;
   top: 13px;
@@ -2091,11 +2094,9 @@ progress {
   background: var(--raised);
   color: #1d2125;
   opacity: 0;
-  transition:
-    opacity 120ms,
-    background 120ms;
+  transform: translateX(-6px);
 }
-.card-edit-control {
+.movable-card .card-edit-control {
   position: absolute;
   top: 4px;
   right: 3px;
@@ -2118,12 +2119,14 @@ progress {
   opacity: 1;
 }
 .movable-card:hover .card-title,
-.movable-card:focus-within .card-title {
-  padding-left: 23px;
-  padding-right: 40px;
-}
+.movable-card:focus-within .card-title,
 .movable-card.is-complete .card-title {
-  padding-left: 23px;
+  transform: translateX(0);
+}
+.movable-card:hover .card-complete-control,
+.movable-card:focus-within .card-complete-control,
+.movable-card.is-complete .card-complete-control {
+  transform: translateX(0);
 }
 .card-complete-control:hover {
   border-color: #4bce97;
@@ -2222,13 +2225,13 @@ progress {
   transform: translate(-50%, 0);
 }
 @media (hover: none), (pointer: coarse) {
-  .card-complete-control,
-  .card-edit-control {
+  .movable-card .card-complete-control,
+  .movable-card .card-edit-control {
     opacity: 1;
   }
-  .card-open-area .card-title {
-    padding-left: 23px;
-    padding-right: 40px;
+  .card-open-area .card-title,
+  .card-complete-control {
+    transform: none;
   }
   .card-insert-slot {
     height: 18px;
@@ -2242,5 +2245,127 @@ progress {
   .card-open-area .card-title,
   .card-complete-control {
     transition: none;
+  }
+}
+
+/* Shared short motion; never animate the dnd-kit transform on a dragged card. */
+:root {
+  --motion-fast: 140ms;
+  --motion-control: 240ms;
+  --motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.card-complete-control,
+.detail-complete-control {
+  transition:
+    background-color var(--motion-control) ease,
+    border-color var(--motion-control) ease,
+    color var(--motion-fast) ease,
+    opacity var(--motion-control) ease,
+    transform var(--motion-control) var(--motion-ease);
+}
+.card-complete-control svg,
+.detail-complete-control svg {
+  opacity: 0;
+  transform: scale(0.55);
+  transition:
+    opacity var(--motion-fast) ease,
+    transform var(--motion-control) var(--motion-ease);
+}
+.card-complete-control[aria-pressed="true"] svg,
+.detail-complete-control[aria-pressed="true"] svg {
+  opacity: 1;
+  transform: scale(1);
+}
+.detail-complete-control:disabled {
+  opacity: 1;
+}
+.card-edit-control,
+.card-drag-handle,
+.card-insert-button,
+.due {
+  transition:
+    opacity var(--motion-fast) ease,
+    background-color var(--motion-fast) ease,
+    color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease;
+}
+.card-insert-button svg {
+  transform: scale(0.7);
+  transition: transform var(--motion-control) var(--motion-ease);
+}
+.card-insert-button:hover svg,
+.card-insert-button:focus-visible svg {
+  transform: scale(1);
+}
+.modal[open] {
+  animation: dialog-enter 180ms var(--motion-ease);
+}
+.modal[open]::backdrop {
+  animation: backdrop-enter 180ms ease;
+}
+.add-card-form {
+  animation: composer-enter 160ms var(--motion-ease);
+}
+@keyframes dialog-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes backdrop-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes composer-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.app-tooltip {
+  animation: tooltip-enter var(--motion-fast) ease;
+  transition: opacity var(--motion-fast) ease;
+}
+.app-tooltip.tooltip-leaving {
+  opacity: 0;
+  animation: none;
+}
+@keyframes tooltip-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-open-area .card-title,
+  .card-complete-control,
+  .detail-complete-control,
+  .card-complete-control svg,
+  .detail-complete-control svg,
+  .card-edit-control,
+  .card-drag-handle,
+  .card-insert-button,
+  .card-insert-button svg,
+  .due,
+  .app-tooltip {
+    transition: none !important;
+  }
+  .modal[open],
+  .modal[open]::backdrop,
+  .add-card-form,
+  .app-tooltip {
+    animation: none !important;
   }
 }

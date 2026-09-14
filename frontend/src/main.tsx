@@ -1406,6 +1406,7 @@ function CardModal({
     [commentFiles, setCommentFiles] = useState<File[]>([]),
     [progress, setProgress] = useState<number | null>(null),
     [dirty, setDirty] = useState(false);
+  const completing = useRef(false);
   const load = async () => {
     const d = await get<Detail>("detail", { name });
     setData(d);
@@ -1448,9 +1449,15 @@ function CardModal({
     }
   };
   const toggleComplete = async () => {
-    if (!data || busy) return;
+    if (!data || busy || completing.current) return;
+    completing.current = true;
+    const previous = data;
+    const completed = data.card.completed ? 0 : 1;
     setBusy(true);
     setError("");
+    // Give immediate feedback without replacing unsaved fields or comment drafts.
+    setData({ ...data, card: { ...data.card, completed } });
+    setDraft((current: any) => ({ ...current, completed }));
     try {
       const d = await api<Detail>(
         "save_card",
@@ -1458,7 +1465,7 @@ function CardModal({
           data: {
             name,
             modified: data.card.modified,
-            completed: data.card.completed ? 0 : 1,
+            completed,
           },
         },
         true,
@@ -1469,12 +1476,20 @@ function CardModal({
         completed: d.card.completed,
         modified: d.card.modified,
       }));
-      await refresh();
     } catch (e) {
+      setData(previous);
+      setDraft((current: any) => ({
+        ...current,
+        completed: previous.card.completed,
+      }));
       setError((e as Error).message);
+      return;
     } finally {
+      completing.current = false;
       setBusy(false);
     }
+    // A failed board refresh must not undo an already persisted completion.
+    await refresh().catch((e: Error) => setError(e.message));
   };
   const safeClose = () => {
     if (dirty || comment || commentFiles.length) {
@@ -1516,7 +1531,7 @@ function CardModal({
               disabled={busy}
               onClick={() => void toggleComplete()}
             >
-              {data.card.completed ? <Check size={17} /> : null}
+              <Check size={17} aria-hidden="true" />
             </button>
             <div>
               <input

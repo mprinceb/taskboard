@@ -96,7 +96,7 @@ function SortableCard({
         disabled={disabled}
         onClick={complete}
       >
-        {card.completed ? <Check size={12} /> : null}
+        <Check size={12} aria-hidden="true" />
       </button>
       <button
         className="card-edit-control icon"

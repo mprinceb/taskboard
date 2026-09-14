@@ -2,6 +2,7 @@ import { useEffect, useId, useState } from "react";
 import { createPortal } from "react-dom";
 type Tip = {
   text: string;
+  leaving?: boolean;
   left: number;
   top: number;
   below: boolean;
@@ -13,9 +14,11 @@ export function Tooltips() {
     [tip, setTip] = useState<Tip | null>(null);
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined,
+      removal: ReturnType<typeof setTimeout> | undefined,
       target: HTMLElement | null = null;
-    const clear = () => {
+    const detach = () => {
       clearTimeout(timer);
+      clearTimeout(removal);
       if (target) {
         const ids = (target.getAttribute("aria-describedby") || "")
           .split(" ")
@@ -24,7 +27,19 @@ export function Tooltips() {
         else target.removeAttribute("aria-describedby");
       }
       target = null;
+    };
+    const clear = () => {
+      detach();
       setTip(null);
+    };
+    const hide = () => {
+      detach();
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        setTip(null);
+        return;
+      }
+      setTip((current) => (current ? { ...current, leaving: true } : null));
+      removal = setTimeout(() => setTip(null), 140);
     };
     const show = (el: HTMLElement, delay: number) => {
       if (target === el) return;
@@ -67,7 +82,7 @@ export function Tooltips() {
         target &&
         !(e.relatedTarget instanceof Node && target.contains(e.relatedTarget))
       )
-        clear();
+        hide();
     };
     const focus = (e: FocusEvent) => {
       const el = (e.target as Element).closest<HTMLElement>("[data-tooltip]");
@@ -79,7 +94,7 @@ export function Tooltips() {
     document.addEventListener("pointerover", enter);
     document.addEventListener("pointerout", leave);
     document.addEventListener("focusin", focus);
-    document.addEventListener("focusout", clear);
+    document.addEventListener("focusout", hide);
     document.addEventListener("pointerdown", clear);
     document.addEventListener("keydown", key);
     document.addEventListener("scroll", clear, true);
@@ -89,7 +104,7 @@ export function Tooltips() {
       document.removeEventListener("pointerover", enter);
       document.removeEventListener("pointerout", leave);
       document.removeEventListener("focusin", focus);
-      document.removeEventListener("focusout", clear);
+      document.removeEventListener("focusout", hide);
       document.removeEventListener("pointerdown", clear);
       document.removeEventListener("keydown", key);
       document.removeEventListener("scroll", clear, true);
@@ -99,9 +114,14 @@ export function Tooltips() {
   return tip
     ? createPortal(
         <div
-          id={id}
-          role="tooltip"
-          className={"app-tooltip " + (tip.below ? "tooltip-below" : "")}
+          id={tip.leaving ? undefined : id}
+          role={tip.leaving ? undefined : "tooltip"}
+          aria-hidden={tip.leaving || undefined}
+          className={
+            "app-tooltip " +
+            (tip.below ? "tooltip-below " : "") +
+            (tip.leaving ? "tooltip-leaving" : "")
+          }
           style={{ left: tip.left, top: tip.top }}
         >
           {tip.text}
