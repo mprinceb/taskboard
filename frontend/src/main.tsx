@@ -52,6 +52,7 @@ import {
 } from "./api";
 import "./style.css";
 import { Tooltips } from "./tooltips";
+import { DatePicker } from "./dates";
 import { BoardView } from "./board";
 import { Timeline, NewCardSeed } from "./timeline";
 import { placeCard } from "./planning";
@@ -1306,23 +1307,15 @@ function CardComposer({
                 ))}
             </select>
           </label>
-          <label>
-            Start date
-            <input
-              type="date"
-              value={start}
-              onChange={(e) => setStart(e.target.value)}
-            />
-          </label>
-          <label>
-            Due date
-            <input
-              type="date"
-              value={due}
-              min={start || undefined}
-              onChange={(e) => setDue(e.target.value)}
-            />
-          </label>
+          <DatePicker
+            start={start}
+            due={due}
+            disabled={busy}
+            onChange={(range) => {
+              setStart(range.start);
+              setDue(range.due);
+            }}
+          />
         </div>
         <label>
           Description
@@ -1584,25 +1577,19 @@ function CardModal({
                         ))}
                     </select>
                   </label>
-                  <label>
-                    Start date
-                    <input
-                      aria-label="Start date"
-                      type="date"
-                      value={draft.start_date || ""}
-                      onChange={(e) => change("start_date", e.target.value)}
-                    />
-                  </label>
-                  <label>
-                    Due date
-                    <input
-                      aria-label="Due date"
-                      type="date"
-                      min={draft.start_date || undefined}
-                      value={draft.due_date || ""}
-                      onChange={(e) => change("due_date", e.target.value)}
-                    />
-                  </label>
+                  <DatePicker
+                    start={draft.start_date}
+                    due={draft.due_date}
+                    disabled={busy}
+                    onChange={(range) => {
+                      setDraft((current: any) => ({
+                        ...current,
+                        start_date: range.start || null,
+                        due_date: range.due || null,
+                      }));
+                      setDirty(true);
+                    }}
+                  />
                 </div>
                 <div className="section-heading">
                   <Users size={18} />

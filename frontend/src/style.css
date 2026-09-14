@@ -2251,8 +2251,8 @@ progress {
 /* Shared short motion; never animate the dnd-kit transform on a dragged card. */
 :root {
   --motion-fast: 140ms;
-  --motion-control: 240ms;
-  --motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --motion-control: 300ms;
+  --motion-ease: cubic-bezier(0.4, 0, 0.2, 1);
 }
 .card-complete-control,
 .detail-complete-control {
@@ -2367,5 +2367,211 @@ progress {
   .add-card-form,
   .app-tooltip {
     animation: none !important;
+  }
+}
+
+/* One date-range editor shared by card creation and card details. */
+.date-picker-field {
+  grid-column: span 2;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+.date-picker-trigger {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid var(--input-border);
+  background: var(--raised);
+  justify-content: flex-start;
+  text-align: left;
+  padding: 7px 9px;
+}
+.date-picker-trigger svg {
+  flex-shrink: 0;
+}
+.date-picker-trigger span {
+  overflow-wrap: anywhere;
+}
+.date-popover {
+  position: fixed;
+  margin: 0;
+  padding: 14px;
+  width: min(344px, calc(100vw - 16px));
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: 0 8px 32px #0008;
+  font-size: 13px;
+}
+.date-popover::backdrop {
+  background: #0003;
+}
+.date-popover[open] {
+  animation: backdrop-enter 180ms ease;
+}
+.date-popover-header,
+.date-month-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.date-popover-header {
+  margin-bottom: 12px;
+}
+.date-popover-header h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.date-endpoints {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.date-endpoint {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 7px;
+  min-width: 0;
+}
+.date-endpoint.active {
+  border-color: var(--focus);
+  background: var(--selected);
+}
+.date-endpoint-label {
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  padding: 0 0 4px;
+  justify-content: flex-start;
+  width: 100%;
+}
+.date-endpoint.active .date-endpoint-label {
+  color: var(--blue);
+}
+.date-endpoint > div {
+  position: relative;
+}
+.date-popover .date-endpoint input {
+  width: 100%;
+  min-width: 0;
+  padding: 4px 16px 4px 0;
+  font-size: 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 2px;
+  color: var(--text);
+}
+.date-clear-one {
+  position: absolute;
+  top: 4px;
+  right: -3px;
+  background: transparent;
+  padding: 2px;
+}
+.date-month-nav {
+  margin: 12px 0 5px;
+}
+.date-month-nav strong {
+  font-size: 14px;
+}
+.date-calendar-row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+.date-weekdays {
+  color: var(--muted);
+  text-align: center;
+  font-size: 11px;
+  line-height: 26px;
+}
+.date-calendar [role="gridcell"] {
+  padding: 2px 0;
+}
+.date-calendar .date-day {
+  width: 100%;
+  height: 33px;
+  padding: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  border: 1px solid transparent;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+.date-calendar .date-range-cell {
+  background: #253c6270;
+}
+.date-calendar .date-day.outside-month {
+  color: var(--muted);
+  opacity: 0.6;
+}
+.date-calendar .date-day:hover {
+  background: var(--hover);
+}
+.date-calendar .date-day.today {
+  border-color: var(--focus);
+}
+.date-calendar .date-day.selected {
+  background: var(--blue);
+  color: #172b4d;
+  opacity: 1;
+  font-weight: 700;
+}
+.date-calendar .date-day[aria-disabled="true"] {
+  color: var(--muted);
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.date-shortcuts {
+  display: flex;
+  gap: 6px;
+  margin: 10px 0;
+}
+.date-shortcuts button {
+  flex: 1;
+  font-size: 11px;
+  padding: 6px 4px;
+  background: var(--control);
+}
+.date-picker-hint {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 10px 0;
+  line-height: 1.5;
+}
+.date-picker-error {
+  color: var(--danger-text);
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 8px 0;
+}
+.date-picker-footer {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 5px;
+}
+.date-picker-footer button {
+  font-size: 12px;
+  padding: 7px 8px;
+}
+.date-picker-footer button:first-child {
+  margin-right: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .date-popover[open] {
+    animation: none;
+  }
+  .date-day {
+    transition: none !important;
   }
 }

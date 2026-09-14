@@ -83,7 +83,15 @@ function SortableCard({
         (card.completed ? " is-complete" : "") +
         (isDragging ? " drag-source" : "")
       }
-      style={{ transform: CSS.Transform.toString(transform), transition }}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition: [
+          transition,
+          "border-color 180ms ease, background-color 180ms ease, opacity 180ms ease",
+        ]
+          .filter(Boolean)
+          .join(", "),
+      }}
     >
       <button
         className="card-complete-control"

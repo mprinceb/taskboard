@@ -5,6 +5,7 @@ A small, open-source task tracker built as a **Frappe app with a React frontend*
 ## Features
 
 - Configurable lists; card and list ordering; archive and restore.
+- A shared calendar picker for start/due dates in card creation and details, with range highlighting, quick dates, typed-date validation, clearing and keyboard navigation. Apply updates the draft; saving the card persists the dates.
 - Hover or focus a card to reveal completion and edit controls; hover or focus the gap between cards to insert a new card at that position. Controls include contextual tooltips.
 - Cards with Markdown descriptions, multiple assignees, optional start/due dates, and completion controls on cards and in card details. Moving to a different list adopts that list’s completion state; ordinary edits and reordering preserve manual completion.
 - Comments, explicit member mentions, and downloadable private attachments on cards or comments.
