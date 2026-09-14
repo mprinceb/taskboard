@@ -2,6 +2,8 @@
   "name": "taskboard",
   "private": true,
   "scripts": {
-    "build": "cd frontend && npm run build"
-  }
+    "build": "cd frontend && npm run build",
+    "postinstall": "npm ci --prefix frontend --include=dev"
+  },
+  "license": "MIT"
 }

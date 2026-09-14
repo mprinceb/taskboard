@@ -18,18 +18,28 @@ A small, open-source task tracker built as a **Frappe app with a React frontend*
 
 Tested against **Frappe 14.92.0 / Python 3.10**, with React 18 and Vite 6. Requires a Node version supported by Vite 6. Other Frappe major versions have not been validated.
 
-Clone this repository into `frappe-bench/apps/taskboard`, then from the bench directory:
+From an existing bench directory:
 
 ```sh
-./env/bin/pip install -e apps/taskboard --no-deps
-# Add taskboard once to sites/apps.txt if not installed using bench get-app.
-cd apps/taskboard/frontend
-npm ci
-npm run build
-cd ../../..
+bench get-app --branch main git@github.com:mprinceb/taskboard.git
 bench --site YOUR_SITE install-app taskboard
 bench build --app taskboard
 bench --site YOUR_SITE clear-cache
+bench restart
+```
+
+`bench get-app` installs the Python package and runs the root package's install hook, which installs the locked React dependencies (including build tools). No separate frontend server or manual `npm install` is needed. `bench get-app` normally also builds assets; the explicit build above is safe to repeat. The machine needs GitHub SSH access for this URL; HTTPS cloning is also supported.
+
+On a development bench, restart `bench start` instead of using `bench restart`. A normal production bench uses its existing web, Redis, scheduler and worker services; the optional dedicated services in this repository are not required.
+
+For later updates, pull the app, refresh dependencies, migrate and rebuild:
+
+```sh
+git -C apps/taskboard pull --ff-only
+bench setup requirements taskboard
+bench --site YOUR_SITE migrate
+bench build --app taskboard
+bench restart
 ```
 
 Open **`/taskboard`** on that site and sign in as `Administrator` for initial setup. Invite the first named admin from **Share**; existing users accept while signed in with the invited email. The app does not create a default password or automatically enroll existing ERP users.
@@ -38,7 +48,13 @@ Invitations expire after seven days. Resending invalidates the previous link. Us
 
 ## Email and reminders
 
-Configure a default outgoing **Email Account** in Frappe. Set a correct site `host_name`, or a Taskboard-specific `taskboard_url` origin (for example `https://tasks.example.com`), so emails point to a URL your users can reach. Mail transport credentials remain in Frappe.
+Configure a default outgoing **Email Account** in Frappe. Set a correct site `host_name`, or a Taskboard-specific `taskboard_url` origin (for example `https://tasks.example.com`), so emails point to a URL your users can reach. Mail transport credentials remain in Frappe. For example:
+
+```sh
+bench --site YOUR_SITE set-config taskboard_url https://staging.example.com
+```
+
+Use the site origin without `/taskboard`. Staging sites often mute mail or disable the scheduler: invitations and notification emails require mail to be unmuted, Email Queue to be unsuspended, and scheduler/workers to be running. Enable these only when you intend staging to send email.
 
 With a normal bench deployment, run the standard Frappe scheduler and workers. Taskboard registers a five-minute scheduled job which prepares notices and queues emails; Frappe's normal Email Queue processing sends them.
 
@@ -96,4 +112,4 @@ Use the bench's normal database and file backups (`bench --site YOUR_SITE backup
 
 ## Intentional first-release limits
 
-One board; no automation builder, subtasks, labels, custom fields, dependencies, time tracking, Trello synchronization or import. Dates are date-only. The timeline is edited through card details. Desktop dragging is complemented by list selectors and list position controls. No public repository has been published automatically.
+One board; no automation builder, subtasks, labels, custom fields, dependencies, time tracking, Trello synchronization or import. Dates are date-only. The timeline is edited through card details. Desktop dragging is complemented by list selectors and list position controls.
