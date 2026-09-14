@@ -51,6 +51,9 @@ import {
   Attachment,
 } from "./api";
 import "./style.css";
+import { BoardView } from "./board";
+import { Timeline, NewCardSeed } from "./timeline";
+import { placeCard } from "./planning";
 const day = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const today = () => day(new Date());
@@ -177,11 +180,27 @@ function App() {
     [inviteToken] = useState(
       new URLSearchParams(location.search).get("invite"),
     );
+  const [composer, setComposer] = useState<NewCardSeed | null>(null);
+  const mutation = useRef(false),
+    interacting = useRef(false),
+    generation = useRef(0);
+  const setInteraction = (value: boolean) => {
+    interacting.current = value;
+    generation.current++;
+  };
   const [newList, setNewList] = useState(false),
     [newTitle, setNewTitle] = useState("");
   const load = async (silent = false) => {
+    if (mutation.current || interacting.current) return;
+    const stamp = generation.current;
     try {
       const b = await get<Board>("board");
+      if (
+        stamp !== generation.current ||
+        mutation.current ||
+        interacting.current
+      )
+        return;
       setBoard(b);
       setFatal("");
     } catch (e) {
@@ -205,16 +224,129 @@ function App() {
     };
   }, [!!board]);
   const act = async (fn: () => Promise<any>) => {
+    if (mutation.current) return;
+    mutation.current = true;
+    generation.current++;
     setError("");
     setBusy(true);
     try {
       await fn();
-      await load(true);
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      mutation.current = false;
+      setBusy(false);
+      await load(true);
+    }
+  };
+  const createCard = async (data: Record<string, unknown>) => {
+    if (mutation.current)
+      throw new Error("Please wait for the current change to save.");
+    mutation.current = true;
+    generation.current++;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api<Detail>("save_card", { data }, true);
+      const card = {
+        ...result.card,
+        assignees: result.assignees,
+        comment_count: result.comments.length,
+        attachment_count: result.attachments.length,
+      };
+      setBoard((b) => (b ? { ...b, cards: [...b.cards, card] } : b));
+      setQuery("");
+      setAssignee("");
+      setOverdue(false);
+      return card;
+    } finally {
+      mutation.current = false;
       setBusy(false);
     }
+  };
+  const changeCard = async (
+    card: Card,
+    patch: Partial<Card>,
+    before?: string,
+    reorder = false,
+  ) => {
+    if (!board || mutation.current) return;
+    const previous = board;
+    mutation.current = true;
+    generation.current++;
+    setBusy(true);
+    setError("");
+    const updated = {
+      ...card,
+      ...patch,
+      completed:
+        board.lists.find((l) => l.name === (patch.list_id || card.list_id))
+          ?.is_done || 0,
+    };
+    setBoard({
+      ...board,
+      cards: reorder
+        ? placeCard(board.cards, updated, updated.list_id, before)
+        : board.cards.map((c) => (c.name === card.name ? updated : c)),
+    });
+    try {
+      let result: Detail;
+      if (reorder) {
+        await api(
+          "move_card",
+          {
+            name: card.name,
+            list_id: updated.list_id,
+            before,
+            modified: card.modified,
+          },
+          true,
+        );
+        result = await get<Detail>("detail", { name: card.name });
+      } else
+        result = await api<Detail>(
+          "save_card",
+          { data: { name: card.name, modified: card.modified, ...patch } },
+          true,
+        );
+      setBoard((b) =>
+        b
+          ? {
+              ...b,
+              cards: b.cards.map((c) =>
+                c.name === card.name
+                  ? { ...c, ...result.card, assignees: result.assignees }
+                  : c,
+              ),
+            }
+          : b,
+      );
+    } catch (e) {
+      setBoard(previous);
+      setError((e as Error).message);
+    } finally {
+      mutation.current = false;
+      setBusy(false);
+      void load(true);
+    }
+  };
+  const reorderLists = async (ids: string[]) => {
+    if (!board || mutation.current) return;
+    const previous = board;
+    setBoard({
+      ...board,
+      lists: ids
+        .map((id) => board.lists.find((l) => l.name === id)!)
+        .concat(board.lists.filter((l) => l.archived)),
+    });
+    await act(async () => {
+      try {
+        await api("reorder_lists", { names: ids }, true);
+      } catch (e) {
+        setBoard(previous);
+        throw e;
+      }
+    });
   };
   const openCard = (id: string | null) => {
     setCard(id);
@@ -245,31 +377,6 @@ function App() {
         (!assignee || c.assignees.includes(assignee)) &&
         (!overdue || (!!c.due_date && c.due_date < today() && !c.completed)),
     );
-  const drop = (e: React.DragEvent, list: Column, before?: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    let data;
-    try {
-      data = JSON.parse(e.dataTransfer.getData("text/plain"));
-    } catch {
-      return;
-    }
-    if (data.type === "card") {
-      const c = board.cards.find((c) => c.name === data.id);
-      if (c && before !== c.name)
-        void act(() =>
-          api(
-            "move_card",
-            { name: c.name, list_id: list.name, before, modified: c.modified },
-            true,
-          ),
-        );
-    } else if (data.type === "list" && board.role === "Admin") {
-      const ids = visibleLists.map((x) => x.name).filter((x) => x !== data.id);
-      ids.splice(ids.indexOf(list.name), 0, data.id);
-      void act(() => api("reorder_lists", { names: ids }, true));
-    }
-  };
   return (
     <div className="app">
       <nav className="topbar">
@@ -319,6 +426,14 @@ function App() {
           </div>
         </div>
         <div className="board-actions">
+          <button
+            className="primary create-card-button"
+            disabled={busy || !visibleLists.length}
+            onClick={() => setComposer({ list_id: visibleLists[0]?.name })}
+          >
+            <Plus size={16} />
+            Create card
+          </button>
           <div className="avatar-stack">
             {board.members.slice(0, 4).map((m) => (
               <Avatar
@@ -416,125 +531,21 @@ function App() {
         </div>
       )}
       {view === "board" ? (
-        <main className="board-canvas">
-          {visibleLists.map((list) => (
-            <section
-              key={list.name}
-              className="column"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => drop(e, list)}
-            >
-              <header
-                className="column-header"
-                draggable={board.role === "Admin"}
-                onDragStart={(e) =>
-                  e.dataTransfer.setData(
-                    "text/plain",
-                    JSON.stringify({ type: "list", id: list.name }),
-                  )
-                }
-              >
-                <div className="column-title">
-                  {list.is_done ? (
-                    <CheckCircle2 size={15} className="green" />
-                  ) : (
-                    <span className="list-dot" />
-                  )}
-                  <h2>{list.title}</h2>
-                  <span>
-                    {filtered.filter((c) => c.list_id === list.name).length}
-                  </span>
-                </div>
-                {board.role === "Admin" && (
-                  <button
-                    className="icon"
-                    aria-label={"Edit list " + list.title}
-                    onClick={() => setPanel("list:" + list.name)}
-                  >
-                    <MoreHorizontal size={19} />
-                  </button>
-                )}
-              </header>
-              <div className="card-stack">
-                {filtered
-                  .filter((c) => c.list_id === list.name)
-                  .map((c) => (
-                    <article
-                      key={c.name}
-                      className="task-card"
-                      draggable
-                      tabIndex={0}
-                      role="button"
-                      aria-label={"Open card " + c.title}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") openCard(c.name);
-                      }}
-                      onClick={() => openCard(c.name)}
-                      onDragStart={(e) => {
-                        e.stopPropagation();
-                        e.dataTransfer.setData(
-                          "text/plain",
-                          JSON.stringify({ type: "card", id: c.name }),
-                        );
-                      }}
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={(e) => drop(e, list, c.name)}
-                    >
-                      <div className="card-title">
-                        {!!c.completed && <Check size={15} className="green" />}
-                        {c.title}
-                      </div>
-                      <div className="card-meta">
-                        {c.due_date && (
-                          <span
-                            className={
-                              "due " +
-                              (c.completed
-                                ? "complete"
-                                : c.due_date < today()
-                                  ? "late"
-                                  : "")
-                            }
-                          >
-                            <Clock size={12} />
-                            {c.start_date && c.start_date !== c.due_date
-                              ? dateLabel(c.start_date) + " – "
-                              : ""}
-                            {dateLabel(c.due_date)}
-                          </span>
-                        )}
-                        {c.description && (
-                          <AlignLeft size={14} aria-label="Has description" />
-                        )}
-                        {c.comment_count > 0 && (
-                          <span>
-                            <MessageSquare size={13} />
-                            {c.comment_count}
-                          </span>
-                        )}
-                        {c.attachment_count > 0 && (
-                          <span>
-                            <Paperclip size={13} />
-                            {c.attachment_count}
-                          </span>
-                        )}
-                        <div className="card-avatars">
-                          {c.assignees.slice(0, 3).map((u) => (
-                            <Avatar
-                              key={u}
-                              user={u}
-                              members={board.members}
-                              small
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    </article>
-                  ))}
-              </div>
-              <AddCard list={list} act={act} open={openCard} />
-            </section>
-          ))}
+        <BoardView
+          cards={filtered}
+          lists={visibleLists}
+          admin={board.role === "Admin"}
+          busy={busy}
+          open={openCard}
+          editList={(id) => setPanel("list:" + id)}
+          move={(c, t) => changeCard(c, { list_id: t.list }, t.before, true)}
+          reorder={reorderLists}
+          interaction={setInteraction}
+          face={(c) => <CardFace c={c} members={board.members} />}
+          add={(list) => (
+            <AddCard list={list} create={createCard} details={setComposer} />
+          )}
+        >
           {board.role === "Admin" && (
             <div className="new-list">
               {newList ? (
@@ -582,9 +593,26 @@ function App() {
               )}
             </div>
           )}
-        </main>
+        </BoardView>
       ) : (
-        <Timeline cards={filtered} lists={visibleLists} open={openCard} />
+        <Timeline
+          cards={filtered}
+          lists={visibleLists}
+          busy={busy}
+          open={openCard}
+          create={setComposer}
+          save={changeCard}
+          interaction={setInteraction}
+        />
+      )}
+      {composer && (
+        <CardComposer
+          seed={composer}
+          board={board}
+          close={() => setComposer(null)}
+          create={createCard}
+          open={openCard}
+        />
       )}
       {card && (
         <CardModal
@@ -959,57 +987,150 @@ function Invite({ token }: { token: string }) {
     </div>
   );
 }
+function CardFace({ c, members }: { c: Card; members: Member[] }) {
+  return (
+    <>
+      <div className="card-title">
+        {!!c.completed && <Check size={15} className="green" />}
+        {c.title}
+      </div>
+      <div className="card-meta">
+        {c.due_date && (
+          <span
+            className={
+              "due " +
+              (c.completed ? "complete" : c.due_date < today() ? "late" : "")
+            }
+          >
+            <Clock size={12} />
+            {c.start_date && c.start_date !== c.due_date
+              ? dateLabel(c.start_date) + " – "
+              : ""}
+            {dateLabel(c.due_date)}
+          </span>
+        )}
+        {c.description && <AlignLeft size={14} aria-label="Has description" />}
+        {c.comment_count > 0 && (
+          <span>
+            <MessageSquare size={13} />
+            {c.comment_count}
+          </span>
+        )}
+        {c.attachment_count > 0 && (
+          <span>
+            <Paperclip size={13} />
+            {c.attachment_count}
+          </span>
+        )}
+        <div className="card-avatars">
+          {c.assignees.slice(0, 3).map((u) => (
+            <Avatar key={u} user={u} members={members} small />
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
 function AddCard({
   list,
-  act,
-  open,
+  create,
+  details,
 }: {
   list: Column;
-  act: (fn: () => Promise<any>) => Promise<void>;
-  open: (id: string) => void;
+  create: (data: Record<string, unknown>) => Promise<Card>;
+  details: (seed: NewCardSeed) => void;
 }) {
   const [editing, setEditing] = useState(false),
     [title, setTitle] = useState(""),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  const field = useRef<HTMLTextAreaElement>(null),
+    saving = useRef(false);
+  const submit = async () => {
+    if (!title.trim() || saving.current) return;
+    saving.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      await create({ title: title.trim(), list_id: list.name });
+      setTitle("");
+      requestAnimationFrame(() => {
+        field.current?.focus();
+        const stack = field.current
+          ?.closest(".column")
+          ?.querySelector(".card-stack");
+        if (stack) stack.scrollTop = stack.scrollHeight;
+      });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      saving.current = false;
+      setBusy(false);
+    }
+  };
   return editing ? (
     <form
       className="add-card-form"
       onSubmit={(e) => {
         e.preventDefault();
-        setBusy(true);
-        void act(async () => {
-          const result = await api<Detail>(
-            "save_card",
-            { data: { title, list_id: list.name } },
-            true,
-          );
-          setTitle("");
-          setEditing(false);
-          open(result.card.name);
-        }).finally(() => setBusy(false));
+        void submit();
       }}
     >
       <textarea
+        ref={field}
         autoFocus
         required
+        maxLength={500}
         aria-label={"New card in " + list.title}
-        placeholder="Enter a title for this card…"
+        placeholder="What needs to be done?"
         value={title}
+        disabled={busy}
         onChange={(e) => setTitle(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.nativeEvent.isComposing) return;
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            void submit();
+          }
+          if (e.key === "Escape") {
+            e.preventDefault();
+            setEditing(false);
+          }
+        }}
       />
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
       <div className="inline-actions">
-        <button className="primary" disabled={busy}>
-          Add card
+        <button className="primary" disabled={busy || !title.trim()}>
+          {busy ? "Adding…" : "Add card"}
+        </button>
+        <button
+          type="button"
+          className="subtle"
+          disabled={busy}
+          onClick={() => {
+            details({ list_id: list.name, title });
+            setEditing(false);
+          }}
+        >
+          Details
         </button>
         <button
           className="icon"
           type="button"
+          disabled={busy}
           aria-label="Cancel card"
           onClick={() => setEditing(false)}
         >
           <X size={19} />
         </button>
       </div>
+      <small className="quick-add-hint">
+        Enter to add · Shift + Enter for a new line
+      </small>
     </form>
   ) : (
     <button className="add-card" onClick={() => setEditing(true)}>
@@ -1018,164 +1139,184 @@ function AddCard({
     </button>
   );
 }
-function Timeline({
-  cards,
-  lists,
+function CardComposer({
+  seed,
+  board,
+  close,
+  create,
   open,
 }: {
-  cards: Card[];
-  lists: Column[];
+  seed: NewCardSeed;
+  board: Board;
+  close: () => void;
+  create: (data: Record<string, unknown>) => Promise<Card>;
   open: (id: string) => void;
 }) {
-  const [scale, setScale] = useState(14),
-    [anchor, setAnchor] = useState(today());
-  let start = new Date(anchor + "T12:00:00");
-  start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
-  const dates = Array.from({ length: scale }, (_, i) => {
-    let d = new Date(start);
-    d.setDate(d.getDate() + i);
-    return day(d);
-  });
-  const scheduled = cards.filter((c) => c.due_date || c.start_date),
-    unscheduled = cards.filter((c) => !c.due_date && !c.start_date);
-  const diff = (s: string) =>
-    Math.round(
-      (new Date(s + "T12:00:00").getTime() - start.getTime()) / 86400000,
-    );
+  const [title, setTitle] = useState(seed.title || ""),
+    [list, setList] = useState(
+      seed.list_id || board.lists.find((l) => !l.archived)?.name || "",
+    ),
+    [start, setStart] = useState(seed.start_date || ""),
+    [due, setDue] = useState(seed.due_date || ""),
+    [description, setDescription] = useState(""),
+    [selected, setSelected] = useState<string[]>([]),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState(""),
+    [openAfter, setOpenAfter] = useState(false);
+  const saving = useRef(false);
+  const safeClose = () => {
+    if (busy) return;
+    if (
+      (title !== (seed.title || "") || description) &&
+      !window.confirm("Discard this card draft?")
+    )
+      return;
+    close();
+  };
   return (
-    <main className="timeline-wrap">
-      <div className="timeline-tools">
-        <h2>
-          {new Date(anchor + "T12:00:00").toLocaleDateString(undefined, {
-            month: "long",
-            year: "numeric",
-          })}
-        </h2>
-        <button
-          className="icon"
-          aria-label="Previous period"
-          onClick={() => {
-            let d = new Date(anchor + "T12:00:00");
-            d.setDate(d.getDate() - scale);
-            setAnchor(day(d));
-          }}
-        >
-          <ChevronLeft size={18} />
-        </button>
-        <button onClick={() => setAnchor(today())}>Today</button>
-        <button
-          className="icon"
-          aria-label="Next period"
-          onClick={() => {
-            let d = new Date(anchor + "T12:00:00");
-            d.setDate(d.getDate() + scale);
-            setAnchor(day(d));
-          }}
-        >
-          <ChevronRight size={18} />
-        </button>
-        <select
-          aria-label="Timeline scale"
-          value={scale}
-          onChange={(e) => setScale(+e.target.value)}
-        >
-          <option value={7}>Week</option>
-          <option value={14}>Two weeks</option>
-          <option value={31}>Month</option>
-        </select>
-      </div>
-      <div className="timeline-scroll">
-        <div className="timeline-grid" style={{ minWidth: 280 + scale * 48 }}>
-          <div className="timeline-head">
-            <div>Cards by list</div>
-            <div
-              className="date-grid"
-              style={{ gridTemplateColumns: `repeat(${scale},1fr)` }}
+    <Modal title="Create card" close={safeClose}>
+      <form
+        className="panel-body card-composer"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (saving.current || !title.trim()) return;
+          if (start && due && due < start) {
+            setError("Due date must be on or after the start date.");
+            return;
+          }
+          saving.current = true;
+          setBusy(true);
+          setError("");
+          try {
+            const c = await create({
+              title: title.trim(),
+              list_id: list,
+              start_date: start || null,
+              due_date: due || null,
+              description,
+              assignees: selected,
+            });
+            close();
+            if (openAfter) open(c.name);
+          } catch (e) {
+            setError((e as Error).message);
+          } finally {
+            saving.current = false;
+            setBusy(false);
+          }
+        }}
+      >
+        <label>
+          Card title
+          <textarea
+            autoFocus
+            aria-label="New card title"
+            placeholder="What needs to be done?"
+            required
+            maxLength={500}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                e.currentTarget.form?.requestSubmit();
+              }
+            }}
+          />
+        </label>
+        <div className="composer-properties">
+          <label>
+            List
+            <select
+              value={list}
+              onChange={(e) => setList(e.target.value)}
+              required
             >
-              {dates.map((d) => (
-                <span key={d} className={d === today() ? "today" : ""}>
-                  <small>
-                    {new Date(d + "T12:00:00").toLocaleDateString(undefined, {
-                      weekday: "short",
-                    })}
-                  </small>
-                  {Number(d.slice(-2))}
-                </span>
-              ))}
-            </div>
-          </div>
-          {lists.map((list) => {
-            const rows = scheduled.filter((c) => c.list_id === list.name);
-            if (!rows.length) return null;
-            return (
-              <section key={list.name}>
-                <h3 className="timeline-group">
-                  {list.title}
-                  <span>{rows.length}</span>
-                </h3>
-                {rows.map((c) => {
-                  const from = diff(c.start_date || c.due_date!),
-                    to = diff(c.due_date || c.start_date!),
-                    left = Math.max(0, from),
-                    right = Math.min(scale - 1, to);
-                  return (
-                    <div className="timeline-row" key={c.name}>
-                      <button onClick={() => open(c.name)} title={c.title}>
-                        {!!c.completed && <Check size={14} />}
-                        <span>{c.title}</span>
-                      </button>
-                      <div
-                        className="timeline-track"
-                        style={{ backgroundSize: `${100 / scale}% 100%` }}
-                      >
-                        {right >= left && (
-                          <button
-                            className={
-                              "timeline-bar " +
-                              (c.completed
-                                ? "done"
-                                : c.due_date && c.due_date < today()
-                                  ? "overdue"
-                                  : "")
-                            }
-                            style={{
-                              left: `${(left / scale) * 100}%`,
-                              width: `${((right - left + 1) / scale) * 100}%`,
-                            }}
-                            onClick={() => open(c.name)}
-                            title={`${c.title}: ${c.start_date || c.due_date} – ${c.due_date || c.start_date}`}
-                          >
-                            {c.title}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </section>
-            );
-          })}
-          {scheduled.length === 0 && (
-            <p className="empty-timeline">
-              Add dates to a card to see it on the timeline.
-            </p>
-          )}
+              {board.lists
+                .filter((l) => !l.archived)
+                .map((l) => (
+                  <option key={l.name} value={l.name}>
+                    {l.title}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <label>
+            Start date
+            <input
+              type="date"
+              value={start}
+              onChange={(e) => setStart(e.target.value)}
+            />
+          </label>
+          <label>
+            Due date
+            <input
+              type="date"
+              value={due}
+              min={start || undefined}
+              onChange={(e) => setDue(e.target.value)}
+            />
+          </label>
         </div>
-      </div>
-      <section className="unscheduled">
-        <h3>
-          Unscheduled <span>{unscheduled.length}</span>
-        </h3>
-        <div>
-          {unscheduled.map((c) => (
-            <button key={c.name} onClick={() => open(c.name)}>
-              {c.title}
-              <Plus size={14} />
+        <label>
+          Description
+          <textarea
+            value={description}
+            placeholder="Add context, links, or a checklist…"
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </label>
+        <div className="section-heading">
+          <h3>Members</h3>
+        </div>
+        <div className="assignee-picker">
+          {board.members.map((m) => (
+            <button
+              type="button"
+              key={m.user}
+              aria-pressed={selected.includes(m.user)}
+              className={
+                "member-pill " + (selected.includes(m.user) ? "chosen" : "")
+              }
+              onClick={() =>
+                setSelected(
+                  selected.includes(m.user)
+                    ? selected.filter((u) => u !== m.user)
+                    : [...selected, m.user],
+                )
+              }
+            >
+              <Avatar user={m.user} members={board.members} small />
+              {m.full_name}
+              {selected.includes(m.user) && <Check size={13} />}
             </button>
           ))}
         </div>
-      </section>
-    </main>
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={openAfter}
+            onChange={(e) => setOpenAfter(e.target.checked)}
+          />
+          Open card after creating to add files and comments
+        </label>
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
+        <div className="composer-footer">
+          <span className="muted">Ctrl / ⌘ + Enter to create</span>
+          <button type="button" onClick={safeClose} disabled={busy}>
+            Cancel
+          </button>
+          <button className="primary" disabled={busy || !title.trim() || !list}>
+            {busy ? "Creating…" : "Create card"}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 function CardModal({

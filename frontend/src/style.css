@@ -24,7 +24,12 @@
   --danger-bg: #502a28;
   --danger-text: #ffb3a9;
   --topbar: #1f1f21;
-  --board-gradient: linear-gradient(135deg, #4b3e79 0%, #694779 48%, #93577f 100%);
+  --board-gradient: linear-gradient(
+    135deg,
+    #4b3e79 0%,
+    #694779 48%,
+    #93577f 100%
+  );
 }
 * {
   box-sizing: border-box;
@@ -1550,4 +1555,513 @@ progress {
 ::selection {
   background: #4a6291;
   color: #ffffff;
+}
+
+/* Direct manipulation and card creation. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.column-drop-zone {
+  display: flex;
+  flex-direction: column;
+  min-height: 50px;
+  min-width: 0;
+  overflow: hidden;
+}
+.column-drop-zone .card-stack {
+  min-height: 8px;
+}
+.column-drop-zone > .add-card,
+.column-drop-zone > .add-card-form {
+  flex-shrink: 0;
+}
+.movable-card {
+  position: relative;
+  padding: 0;
+  transition:
+    border-color 120ms,
+    opacity 120ms;
+}
+.card-open-area {
+  padding: 11px 12px 9px;
+  cursor: grab;
+  border-radius: 6px;
+  touch-action: manipulation;
+}
+.card-open-area .card-title {
+  padding-right: 14px;
+}
+.card-drag-handle {
+  position: absolute;
+  right: 2px;
+  top: 4px;
+  z-index: 1;
+  padding: 4px 1px;
+  background: transparent;
+  color: var(--muted);
+  opacity: 0;
+  cursor: grab;
+  touch-action: none;
+}
+.task-card:hover .card-drag-handle,
+.card-drag-handle:focus-visible {
+  opacity: 1;
+}
+.list-drag-handle {
+  padding: 3px 0;
+  background: none;
+  color: var(--muted);
+  cursor: grab;
+  touch-action: none;
+}
+.drag-source {
+  opacity: 0.28;
+}
+.card-drag-overlay {
+  cursor: grabbing;
+  box-shadow: 0 12px 30px #0008;
+  transform: rotate(2deg);
+  border-color: var(--focus);
+}
+.list-drag-overlay {
+  padding: 18px;
+  min-width: 250px;
+  border-radius: 10px;
+  background: #101204;
+  box-shadow: 0 12px 30px #0008;
+}
+.drop-column {
+  box-shadow: 0 0 0 2px #85b8ff90;
+}
+.card-drop-marker {
+  height: 4px;
+  border-radius: 4px;
+  background: var(--focus);
+  margin: 2px 0 7px;
+  pointer-events: none;
+}
+.empty-drop {
+  padding: 20px 10px;
+  color: var(--blue);
+  font-size: 12px;
+  text-align: center;
+  border: 1px dashed var(--focus);
+  margin-bottom: 8px;
+  border-radius: 6px;
+}
+.quick-add-hint {
+  display: block;
+  padding: 9px 1px 0;
+  font-size: 10px;
+  color: var(--muted);
+}
+.add-card-form textarea {
+  min-height: 85px;
+}
+.add-card-form .form-error {
+  margin: 0 0 8px;
+}
+.create-card-button {
+  white-space: nowrap;
+  font-size: 13px;
+}
+.composer-properties {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr;
+  gap: 12px;
+}
+.composer-properties select,
+.composer-properties input {
+  width: 100%;
+  min-width: 0;
+}
+.card-composer textarea {
+  min-height: 75px;
+}
+.card-composer .section-heading {
+  margin-top: 4px;
+}
+.composer-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+.composer-footer > span {
+  margin-right: auto;
+  font-size: 11px;
+}
+.interactive-timeline {
+  position: relative;
+}
+.interactive-timeline .timeline-tools {
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.interactive-timeline .timeline-tools .timeline-create {
+  background: var(--blue);
+  color: #1d2433;
+  margin-left: auto;
+}
+.interactive-timeline .timeline-tools select {
+  margin-left: 0;
+}
+.timeline-hint {
+  padding: 8px 18px;
+  font-size: 11px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+}
+.interactive-timeline .timeline-head,
+.interactive-timeline .timeline-row {
+  grid-template-columns: 240px 1fr;
+}
+.interactive-timeline .timeline-head {
+  z-index: 5;
+}
+.interactive-timeline .timeline-head > div:first-child,
+.interactive-timeline .timeline-row > button {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--raised);
+}
+.interactive-timeline .timeline-head > div:first-child {
+  z-index: 6;
+}
+.interactive-timeline .timeline-row {
+  min-height: 48px;
+}
+.interactive-timeline .timeline-group {
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 12px;
+  min-height: 38px;
+}
+.timeline-group > button {
+  background: transparent;
+  justify-content: flex-start;
+  font-size: 12px;
+  font-weight: 600;
+  position: sticky;
+  left: 10px;
+}
+.timeline-group > .icon {
+  left: auto;
+  right: 10px;
+}
+.expanded-chevron {
+  transform: rotate(-90deg);
+}
+.timeline-drop-lane .timeline-group {
+  background: var(--selected);
+}
+.timeline-track {
+  cursor: crosshair;
+}
+.interactive-timeline .timeline-bar {
+  top: 8px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: stretch;
+  border-left: 0;
+  min-width: 20px;
+  box-shadow: inset 0 0 0 1px #ffffff1f;
+  overflow: visible;
+}
+.interactive-timeline .timeline-bar.adjusting {
+  opacity: 0.65;
+  outline: 2px solid var(--focus);
+}
+.range-body,
+.range-handle {
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  touch-action: none;
+}
+.range-body {
+  flex: 1;
+  justify-content: flex-start;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  cursor: grab;
+}
+.range-body:hover {
+  background: #ffffff12;
+}
+.range-handle {
+  width: 9px;
+  min-width: 9px;
+  flex-shrink: 0;
+  cursor: ew-resize;
+  position: relative;
+}
+.range-handle::after {
+  content: "";
+  position: absolute;
+  width: 2px;
+  height: 14px;
+  top: 9px;
+  left: 3px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.55;
+}
+.range-handle:hover {
+  background: #ffffff25;
+}
+.start-handle {
+  border-radius: 4px 0 0 4px;
+}
+.end-handle {
+  border-radius: 0 4px 4px 0;
+}
+.timeline-add-row > button {
+  color: var(--muted);
+  font-size: 12px;
+}
+.timeline-add-row .timeline-create-track {
+  touch-action: none;
+}
+.timeline-create-track:hover {
+  background-color: #85b8ff0d;
+}
+.timeline-range-preview {
+  position: absolute;
+  top: 8px;
+  height: 32px;
+  border: 1px dashed var(--focus);
+  border-radius: 4px;
+  background: #253c62cc;
+  color: var(--blue);
+  padding: 7px;
+  font-size: 11px;
+  overflow: hidden;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.offscreen-card {
+  background: transparent;
+  font-size: 11px;
+  color: var(--muted);
+  height: 100%;
+  margin-left: 12px;
+}
+.schedule-feedback {
+  position: absolute;
+  z-index: 10;
+  left: 50%;
+  transform: translateX(-50%);
+  top: 50px;
+  padding: 10px 16px;
+  max-width: 95%;
+  background: var(--selected);
+  color: var(--chrome-text);
+  border: 1px solid var(--focus);
+  border-radius: 6px;
+  box-shadow: 0 4px 18px #0006;
+  font-size: 12px;
+  pointer-events: none;
+}
+.timeline-dragging {
+  user-select: none;
+}
+.unscheduled h3 small {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+  margin-left: 15px;
+}
+.unscheduled-item {
+  display: flex;
+  background: var(--control);
+  border-radius: 5px;
+  max-width: 290px;
+}
+.unscheduled-item > button {
+  background: transparent;
+}
+.unscheduled-drag {
+  cursor: grab;
+  touch-action: none;
+  text-align: left;
+}
+.interactive-timeline .date-grid .weekend {
+  background: #00000015;
+}
+.interactive-timeline .date-grid .today {
+  background: var(--selected);
+}
+@media (hover: none) {
+  .card-drag-handle {
+    opacity: 1;
+  }
+  .range-handle {
+    width: 12px;
+    min-width: 12px;
+  }
+}
+@media (max-width: 900px) {
+  .board-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+}
+@media (max-width: 540px) {
+  .create-card-button {
+    padding: 7px;
+    font-size: 11px;
+  }
+  .board-heading {
+    min-width: 165px;
+  }
+  .composer-properties {
+    grid-template-columns: 1fr 1fr;
+  }
+  .composer-properties > label:first-child {
+    grid-column: 1/-1;
+  }
+  .composer-footer {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .composer-footer > span {
+    flex-basis: 100%;
+  }
+  .timeline-hint {
+    font-size: 10px;
+    line-height: 1.5;
+  }
+  .unscheduled h3 small {
+    display: block;
+    margin: 8px 0 0;
+  }
+  .interactive-timeline .timeline-tools h2 {
+    flex-basis: 100%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .task-card,
+  .column {
+    transition: none !important;
+  }
+}
+
+/* A list is a compact lane: only overlapping date ranges need another row. */
+.timeline-lane-group {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  border-bottom: 1px solid var(--line);
+  min-height: 48px;
+}
+.timeline-list-label {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  align-content: start;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px;
+  padding: 10px 8px;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+}
+.timeline-list-label button {
+  background: transparent;
+}
+.lane-toggle {
+  justify-content: flex-start;
+  text-align: left;
+  padding: 5px;
+  min-width: 0;
+}
+.lane-toggle strong {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.lane-toggle > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+.outside-period {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+  font-size: 10px;
+  color: var(--muted);
+}
+.timeline-lane-content {
+  min-width: 0;
+}
+.timeline-packed-row {
+  min-height: 48px;
+}
+.timeline-lane-content .timeline-create-track {
+  height: 42px;
+}
+.timeline-drop-lane .timeline-list-label {
+  background: var(--selected);
+}
+.lane-create-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px;
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.45;
+  pointer-events: none;
+}
+.timeline-create-track:hover .lane-create-hint {
+  opacity: 1;
+}
+.timeline-create-track:has(.timeline-range-preview) .lane-create-hint {
+  opacity: 0;
+}
+
+.interactive-timeline {
+  --timeline-sidebar: 240px;
+}
+.interactive-timeline .timeline-head,
+.timeline-lane-group {
+  grid-template-columns: var(--timeline-sidebar) 1fr;
+}
+.range-body {
+  font-size: 12px;
+  padding: 0 3px;
+}
+@media (max-width: 540px) {
+  .interactive-timeline {
+    --timeline-sidebar: 145px;
+  }
+  .timeline-list-label {
+    padding: 8px 3px;
+  }
+  .lane-toggle {
+    gap: 3px;
+  }
+  .lane-toggle strong {
+    font-size: 11px;
+  }
+  .outside-period {
+    padding: 5px;
+  }
+  .interactive-timeline .unscheduled {
+    max-height: 140px;
+  }
+}
+
+.movable-card {
+  user-select: none;
 }

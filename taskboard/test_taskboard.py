@@ -81,6 +81,25 @@ class TestTaskboard(unittest.TestCase):
         with self.assertRaises(frappe.PermissionError):
             api.detail(card.name)
 
+    def test_timeline_reschedule_resize_and_list_move(self):
+        card = self.card(start_date="2026-09-14", due_date="2026-09-17", assignees=[self.member])
+        moved = api.save_card(dict(name=card.name, modified=str(card.modified), start_date="2026-09-16", due_date="2026-09-19", list_id=self.done))["card"]
+        self.assertEqual(str(moved.start_date), "2026-09-16")
+        self.assertEqual(str(moved.due_date), "2026-09-19")
+        self.assertTrue(moved.completed)
+        todo = frappe.db.get_value("ToDo", {"reference_name": card.name}, ["date", "status"], as_dict=True)
+        self.assertEqual(str(todo.date), "2026-09-19")
+        self.assertEqual(todo.status, "Closed")
+        with self.assertRaises(frappe.TimestampMismatchError):
+            api.save_card(dict(name=card.name, modified=str(card.modified), due_date="2026-09-21"))
+        resized = api.save_card(dict(name=card.name, modified=str(moved.modified), due_date="2026-09-22", list_id=self.column))["card"]
+        self.assertEqual(str(resized.start_date), "2026-09-16")
+        self.assertEqual(str(resized.due_date), "2026-09-22")
+        self.assertFalse(resized.completed)
+        todo = frappe.db.get_value("ToDo", {"reference_name": card.name}, ["date", "status"], as_dict=True)
+        self.assertEqual(str(todo.date), "2026-09-22")
+        self.assertEqual(todo.status, "Open")
+
     def test_dates_completion_and_stale_edits(self):
         with self.assertRaises(frappe.ValidationError):
             self.card(start_date="2026-09-20", due_date="2026-09-19")

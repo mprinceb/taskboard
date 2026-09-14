@@ -9,6 +9,9 @@ A small, open-source task tracker built as a **Frappe app with a React frontend*
 - Comments, explicit member mentions, and downloadable private attachments on cards or comments.
 - Images, videos, PDF, Word, Excel, text, and archive files. No embedded media/document viewer.
 - Board and week/two-week/month timeline views, search, assignee/overdue filters, and an unscheduled section.
+- Compact timeline lanes: non-overlapping cards share a row; overlapping ranges stack automatically. Drag cards between dates/lists, resize either edge, or drag unscheduled cards onto dates. Changes save immediately.
+- Select empty timeline dates to create a scheduled card. Use Create card for title, list, dates, description and members, or quick-add consecutive cards with Enter on the board.
+- Board drag overlays, insertion markers, edge scrolling, and dedicated keyboard/touch drag handles. Escape cancels dragging; failed saves restore the previous position or dates.
 - Email invitations with expiring single-use tokens, resend/revoke, existing-user acceptance, and new website-user onboarding.
 - App admin/member roles. New Taskboard users do not receive ERPNext or Desk roles.
 - Assignment, mention and due-date emails through Frappe Email Queue. Per-user email preferences and an in-app notification list.
@@ -99,7 +102,7 @@ Run integration tests only on a disposable site with `allow_tests: true` and `mu
 
 ```sh
 bench --site TEST_SITE run-tests --module taskboard.test_taskboard --skip-test-records
-cd apps/taskboard/frontend && npm run build
+cd apps/taskboard/frontend && npm test && npm run build
 ```
 
 The suite covers membership, native read/write permissions, ordering, archive/restore, date validation, completion/reopening, stale edits, comment ownership, mentions, private file access, invitation expiry/resend/replay, new-user Desk isolation, reminder deduplication and stale-reminder suppression.
@@ -112,4 +115,4 @@ Use the bench's normal database and file backups (`bench --site YOUR_SITE backup
 
 ## Intentional first-release limits
 
-One board; no automation builder, subtasks, labels, custom fields, dependencies, time tracking, Trello synchronization or import. Dates are date-only. The timeline is edited through card details. Desktop dragging is complemented by list selectors and list position controls.
+One board; no automation builder, subtasks, labels, custom fields, dependencies, time tracking, Trello synchronization or import. Dates are date-only. Timeline dates can be changed directly or through card details. Focus a timeline bar and use Left/Right to move one day (Shift for a week); focus either edge to resize. Focus a board drag handle, press Space, use arrow keys, then Space to drop or Escape to cancel. On touch screens, hold a card briefly to move it or use its drag handle.
