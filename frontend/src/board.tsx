@@ -22,7 +22,14 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, MoreHorizontal, CheckCircle2 } from "lucide-react";
+import {
+  GripVertical,
+  MoreHorizontal,
+  CheckCircle2,
+  Check,
+  Pencil,
+  Plus,
+} from "lucide-react";
 import { Card, Column } from "./api";
 
 type Target = { list: string; before?: string };
@@ -37,7 +44,8 @@ type Props = {
   reorder: (ids: string[]) => Promise<void>;
   interaction: (active: boolean) => void;
   face: (card: Card) => ReactNode;
-  add: (list: Column) => ReactNode;
+  complete: (card: Card) => void;
+  add: (list: Column, before?: string, close?: () => void) => ReactNode;
   children: ReactNode;
 };
 
@@ -45,11 +53,13 @@ function SortableCard({
   card,
   disabled,
   open,
+  complete,
   children,
 }: {
   card: Card;
   disabled: boolean;
   open: () => void;
+  complete: () => void;
   children: ReactNode;
 }) {
   const {
@@ -68,16 +78,42 @@ function SortableCard({
   return (
     <article
       ref={setNodeRef}
-      className={"task-card movable-card" + (isDragging ? " drag-source" : "")}
+      className={
+        "task-card movable-card" +
+        (card.completed ? " is-complete" : "") +
+        (isDragging ? " drag-source" : "")
+      }
       style={{ transform: CSS.Transform.toString(transform), transition }}
     >
+      <button
+        className="card-complete-control"
+        aria-label={
+          (card.completed ? "Mark incomplete: " : "Mark complete: ") +
+          card.title
+        }
+        aria-pressed={!!card.completed}
+        data-tooltip={card.completed ? "Mark incomplete" : "Mark complete"}
+        disabled={disabled}
+        onClick={complete}
+      >
+        {card.completed ? <Check size={12} /> : null}
+      </button>
+      <button
+        className="card-edit-control icon"
+        aria-label={"Edit card " + card.title}
+        data-tooltip="Edit card"
+        disabled={disabled}
+        onClick={open}
+      >
+        <Pencil size={15} />
+      </button>
       <button
         className="card-drag-handle"
         ref={setActivatorNodeRef}
         {...attributes}
         {...listeners}
         aria-label={"Move card " + card.title}
-        title="Drag to move · Space then arrow keys to move with keyboard"
+        data-tooltip="Drag to move · Space then arrow keys to move with keyboard"
       >
         <GripVertical size={15} />
       </button>
@@ -154,6 +190,7 @@ function ListColumn({
               {...attributes}
               {...listeners}
               aria-label={"Move list " + list.title}
+              data-tooltip="Drag to move list"
             >
               <GripVertical size={14} />
             </button>
@@ -166,6 +203,7 @@ function ListColumn({
           <button
             className="icon"
             aria-label={"Edit list " + list.title}
+            data-tooltip="List options"
             onClick={edit}
           >
             <MoreHorizontal size={19} />
@@ -179,6 +217,10 @@ function ListColumn({
   );
 }
 export function BoardView(p: Props) {
+  const [inserting, setInserting] = useState<{
+    list: string;
+    before: string;
+  } | null>(null);
   const [active, setActive] = useState<string | null>(null),
     [target, setTarget] = useState<Target | null>(null);
   const targetRef = useRef<Target | null>(null),
@@ -306,6 +348,27 @@ export function BoardView(p: Props) {
                   >
                     {cards.map((c) => (
                       <div key={c.name}>
+                        {inserting?.before === c.name &&
+                        inserting.list === list.name ? (
+                          p.add(list, c.name, () => setInserting(null))
+                        ) : (
+                          <div className="card-insert-slot">
+                            <button
+                              className="card-insert-button"
+                              aria-label={"Add a card before " + c.title}
+                              data-tooltip="Add a card here"
+                              disabled={!!active || p.busy}
+                              onClick={() =>
+                                setInserting({
+                                  list: list.name,
+                                  before: c.name,
+                                })
+                              }
+                            >
+                              <Plus size={14} />
+                            </button>
+                          </div>
+                        )}
                         {target?.list === list.name &&
                           target.before === c.name && (
                             <div className="card-drop-marker" />
@@ -313,6 +376,7 @@ export function BoardView(p: Props) {
                         <SortableCard
                           card={c}
                           disabled={p.busy}
+                          complete={() => p.complete(c)}
                           open={() => {
                             if (!active && !suppressClick.current)
                               p.open(c.name);

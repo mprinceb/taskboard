@@ -2065,3 +2065,182 @@ progress {
 .movable-card {
   user-select: none;
 }
+
+/* Card actions stay in place while the title makes room on hover or focus. */
+.movable-card {
+  margin-bottom: 0;
+}
+.card-open-area .card-title {
+  min-height: 20px;
+  transition: padding 120ms ease;
+}
+.card-complete-control {
+  position: absolute;
+  left: 10px;
+  top: 13px;
+  z-index: 2;
+  width: 17px;
+  height: 17px;
+  min-width: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--muted);
+  border-radius: 50%;
+  background: var(--raised);
+  color: #1d2125;
+  opacity: 0;
+  transition:
+    opacity 120ms,
+    background 120ms;
+}
+.card-edit-control {
+  position: absolute;
+  top: 4px;
+  right: 3px;
+  z-index: 2;
+  opacity: 0;
+  width: 28px;
+  height: 28px;
+  padding: 5px;
+}
+.movable-card .card-drag-handle {
+  right: 32px;
+  top: 6px;
+}
+.movable-card:hover .card-complete-control,
+.movable-card:focus-within .card-complete-control,
+.movable-card.is-complete .card-complete-control,
+.movable-card:hover .card-edit-control,
+.movable-card:focus-within .card-edit-control,
+.movable-card:focus-within .card-drag-handle {
+  opacity: 1;
+}
+.movable-card:hover .card-title,
+.movable-card:focus-within .card-title {
+  padding-left: 23px;
+  padding-right: 40px;
+}
+.movable-card.is-complete .card-title {
+  padding-left: 23px;
+}
+.card-complete-control:hover {
+  border-color: #4bce97;
+  background: #216e4e;
+  color: #fff;
+}
+.movable-card.is-complete .card-complete-control,
+.detail-complete-control.is-complete {
+  background: #4bce97;
+  border-color: #4bce97;
+  color: #1d2125;
+}
+.detail-complete-control {
+  flex-shrink: 0;
+  margin-top: 8px;
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--muted);
+  border-radius: 50%;
+  background: transparent;
+}
+.detail-complete-control:hover {
+  border-color: #4bce97;
+}
+.card-insert-slot {
+  height: 8px;
+  position: relative;
+  z-index: 3;
+}
+.card-insert-button {
+  position: absolute;
+  inset: -4px 0;
+  width: 100%;
+  height: 16px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  background: transparent;
+  color: #b8d5ff;
+  border: 0;
+  border-radius: 0;
+}
+.card-insert-button::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 7px;
+  border-top: 2px dotted #579dff;
+}
+.card-insert-button svg {
+  z-index: 1;
+  background: #1c4f91;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  padding: 2px;
+}
+.card-insert-button:hover,
+.card-insert-button:focus-visible {
+  opacity: 1;
+  background: transparent;
+}
+.card-insert-button:disabled {
+  pointer-events: none;
+  opacity: 0;
+}
+.card-stack > div > .add-card-form {
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+.app-tooltip {
+  position: fixed;
+  z-index: 10000;
+  max-width: min(240px, calc(100vw - 24px));
+  width: max-content;
+  padding: 7px 10px;
+  border-radius: 4px;
+  background: #dfe1e6;
+  color: #1d2125;
+  box-shadow: 0 4px 12px #0005;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-align: center;
+  pointer-events: none;
+  transform: translate(-50%, -100%);
+}
+.app-tooltip.tooltip-below {
+  transform: translate(-50%, 0);
+}
+@media (hover: none), (pointer: coarse) {
+  .card-complete-control,
+  .card-edit-control {
+    opacity: 1;
+  }
+  .card-open-area .card-title {
+    padding-left: 23px;
+    padding-right: 40px;
+  }
+  .card-insert-slot {
+    height: 18px;
+  }
+  .card-insert-button {
+    top: 1px;
+    opacity: 0.7;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-open-area .card-title,
+  .card-complete-control {
+    transition: none;
+  }
+}

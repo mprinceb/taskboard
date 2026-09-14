@@ -188,6 +188,15 @@ def save_card(data):
             )
             or 0
         ) + 1024
+    before = data.get("before")
+    if before:
+        if not doc.is_new():
+            frappe.throw("Use the move action to reorder an existing card.")
+        target = frappe.db.get_value(
+            "TB Card", before, ["list_id", "archived"], as_dict=True
+        )
+        if not target or target.archived or target.list_id != data.get("list_id"):
+            frappe.throw("The target card moved. Refresh and try again.")
     previous_mentions = set(re.findall(r"@\[([^\]]+)\]", doc.description or ""))
     for key in [
         "title",
@@ -196,9 +205,10 @@ def save_card(data):
         "start_date",
         "due_date",
         "archived",
+        "completed",
     ]:
         if key in data:
-            if key == "archived":
+            if key in ("archived", "completed"):
                 doc.set(key, 1 if cint(data[key]) else 0)
             else:
                 doc.set(
@@ -214,6 +224,18 @@ def save_card(data):
         if not membership(user):
             frappe.throw("Mentioned users must be active board members.")
     doc.save(ignore_permissions=True)
+    if before:
+        names = frappe.get_all(
+            "TB Card",
+            filters={"list_id": doc.list_id, "archived": 0, "name": ["!=", doc.name]},
+            pluck="name",
+            order_by="position, creation",
+        )
+        names.insert(names.index(before), doc.name)
+        for index, name in enumerate(names):
+            frappe.db.set_value(
+                "TB Card", name, "position", index * 1024, update_modified=False
+            )
     for user in new_mentions:
         if user != frappe.session.user:
             card_notice(
@@ -336,6 +358,7 @@ def save_list(data):
     )
     if doc.is_new():
         doc.position = (frappe.db.get_value("TB List", {}, "max(position)") or 0) + 1024
+    previous_done = cint(doc.is_done)
     for key in ["title", "is_done", "archived"]:
         if key in data:
             doc.set(key, data[key])
@@ -349,6 +372,8 @@ def save_list(data):
     doc.save(ignore_permissions=True)
     for name in frappe.get_all("TB Card", filters={"list_id": doc.name}, pluck="name"):
         card = frappe.get_doc("TB Card", name)
+        if previous_done != cint(doc.is_done):
+            card.completed = doc.is_done
         card.save(ignore_permissions=True)
         for todo in frappe.get_all(
             "ToDo",

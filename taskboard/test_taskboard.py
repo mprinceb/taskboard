@@ -100,6 +100,55 @@ class TestTaskboard(unittest.TestCase):
         self.assertEqual(str(todo.date), "2026-09-22")
         self.assertEqual(todo.status, "Open")
 
+    def test_manual_completion_survives_edits_and_reordering(self):
+        c = self.card(assignees=[self.member], due_date="2026-09-20")
+        frappe.set_user(self.member)
+        completed = api.save_card(dict(name=c.name, modified=str(c.modified), completed=1))["card"]
+        self.assertEqual(completed.list_id, self.column)
+        self.assertTrue(completed.completed)
+        self.assertEqual(frappe.db.get_value("ToDo", {"reference_name": c.name}, "status"), "Closed")
+        with self.assertRaises(frappe.TimestampMismatchError):
+            api.save_card(dict(name=c.name, modified=str(c.modified), completed=0))
+        edited = api.save_card(dict(name=c.name, modified=str(completed.modified), title="Still complete", due_date="2026-09-22"))["card"]
+        self.assertTrue(edited.completed)
+        api.move_card(c.name, self.column, modified=str(edited.modified))
+        self.assertTrue(api.detail(c.name)["card"].completed)
+        frappe.set_user(self.admin)
+        api.save_list(dict(name=self.column, title="Renamed " + self.suffix))
+        self.assertTrue(api.detail(c.name)["card"].completed)
+        current = api.detail(c.name)["card"]
+        reopened = api.save_card(dict(name=c.name, modified=str(current.modified), completed=0))["card"]
+        self.assertFalse(reopened.completed)
+        self.assertEqual(reopened.list_id, self.column)
+        self.assertEqual(api.assignees(c.name), [self.member])
+        self.assertEqual(frappe.db.get_value("ToDo", {"reference_name": c.name}, "status"), "Open")
+        api.save_list(dict(name=self.column, is_done=1))
+        self.assertTrue(api.detail(c.name)["card"].completed)
+
+    def test_create_at_insertion_point_and_reject_moved_target(self):
+        first = self.card()
+        last = self.card()
+        middle = self.card(before=last.name, description="Inserted detail", assignees=[self.member])
+        top = self.card(before=first.name)
+        def order():
+            return frappe.get_all("TB Card", filters={"list_id": self.column, "archived": 0}, pluck="name", order_by="position, creation")
+        self.assertEqual(order(), [top.name, first.name, middle.name, last.name])
+        self.assertEqual(api.detail(middle.name)["card"].description, "Inserted detail")
+        self.assertEqual(api.assignees(middle.name), [self.member])
+        another = self.card(before=last.name)
+        self.assertEqual(order(), [top.name, first.name, middle.name, another.name, last.name])
+        positions = frappe.get_all("TB Card", filters={"list_id": self.column}, pluck="position")
+        self.assertEqual(len(positions), len(set(positions)))
+        api.move_card(last.name, self.done)
+        count = frappe.db.count("TB Card")
+        with self.assertRaises(frappe.ValidationError):
+            self.card(before=last.name)
+        self.assertEqual(frappe.db.count("TB Card"), count)
+        api.save_card(dict(name=first.name, archived=1))
+        with self.assertRaises(frappe.ValidationError):
+            self.card(before=first.name)
+        self.assertEqual(frappe.db.count("TB Card"), count)
+
     def test_dates_completion_and_stale_edits(self):
         with self.assertRaises(frappe.ValidationError):
             self.card(start_date="2026-09-20", due_date="2026-09-19")

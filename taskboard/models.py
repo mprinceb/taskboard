@@ -19,7 +19,8 @@ class Card(Document):
         column = frappe.get_doc("TB List", self.list_id)
         if column.archived and not self.archived:
             frappe.throw("Restore the list before moving cards into it.")
-        self.completed = column.is_done
+        if self.is_new() or self.has_value_changed("list_id"):
+            self.completed = column.is_done
 
     def on_update(self):
         from taskboard.api import publish_change

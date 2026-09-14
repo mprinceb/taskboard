@@ -51,6 +51,7 @@ import {
   Attachment,
 } from "./api";
 import "./style.css";
+import { Tooltips } from "./tooltips";
 import { BoardView } from "./board";
 import { Timeline, NewCardSeed } from "./timeline";
 import { placeCard } from "./planning";
@@ -99,7 +100,7 @@ function Avatar({
           hash % 5
         ],
       }}
-      title={m?.full_name || user}
+      data-tooltip={m?.full_name || user}
     >
       {initials(m?.full_name || user)}
     </span>
@@ -155,7 +156,12 @@ function Modal({
     >
       <header className="modal-header">
         <h2>{title}</h2>
-        <button className="icon" aria-label="Close dialog" onClick={close}>
+        <button
+          className="icon"
+          aria-label="Close dialog"
+          data-tooltip="Close dialog"
+          onClick={close}
+        >
           <X size={20} />
         </button>
       </header>
@@ -254,7 +260,19 @@ function App() {
         comment_count: result.comments.length,
         attachment_count: result.attachments.length,
       };
-      setBoard((b) => (b ? { ...b, cards: [...b.cards, card] } : b));
+      setBoard((b) =>
+        b
+          ? {
+              ...b,
+              cards: placeCard(
+                b.cards,
+                card,
+                card.list_id,
+                data.before as string | undefined,
+              ),
+            }
+          : b,
+      );
       setQuery("");
       setAssignee("");
       setOverdue(false);
@@ -280,8 +298,9 @@ function App() {
       ...card,
       ...patch,
       completed:
-        board.lists.find((l) => l.name === (patch.list_id || card.list_id))
-          ?.is_done || 0,
+        patch.list_id && patch.list_id !== card.list_id
+          ? board.lists.find((l) => l.name === patch.list_id)?.is_done || 0
+          : (patch.completed ?? card.completed),
     };
     setBoard({
       ...board,
@@ -379,6 +398,7 @@ function App() {
     );
   return (
     <div className="app">
+      <Tooltips />
       <nav className="topbar">
         <Logo />
         <span className="top-divider" />
@@ -387,6 +407,7 @@ function App() {
           <button
             className="top-icon"
             aria-label="Notifications"
+            data-tooltip="Notifications"
             onClick={() => setPanel("notifications")}
           >
             <Bell size={19} />
@@ -395,6 +416,7 @@ function App() {
           <button
             className="profile-button"
             aria-label="Account settings"
+            data-tooltip="Account settings"
             onClick={() => setPanel("account")}
           >
             <Avatar user={board.user} members={board.members} />
@@ -461,6 +483,7 @@ function App() {
           <button
             className="top-icon"
             aria-label="Board menu"
+            data-tooltip="Board menu"
             onClick={() => setPanel("menu")}
           >
             <MoreHorizontal size={22} />
@@ -513,6 +536,7 @@ function App() {
         <button
           className="top-icon refresh"
           aria-label="Refresh board"
+          data-tooltip="Refresh board"
           onClick={() => void load()}
         >
           <RefreshCw size={15} />
@@ -542,8 +566,17 @@ function App() {
           reorder={reorderLists}
           interaction={setInteraction}
           face={(c) => <CardFace c={c} members={board.members} />}
-          add={(list) => (
-            <AddCard list={list} create={createCard} details={setComposer} />
+          complete={(c) =>
+            void changeCard(c, { completed: c.completed ? 0 : 1 })
+          }
+          add={(list, before, close) => (
+            <AddCard
+              list={list}
+              before={before}
+              close={close}
+              create={createCard}
+              details={setComposer}
+            />
           )}
         >
           {board.role === "Admin" && (
@@ -990,13 +1023,25 @@ function Invite({ token }: { token: string }) {
 function CardFace({ c, members }: { c: Card; members: Member[] }) {
   return (
     <>
-      <div className="card-title">
-        {!!c.completed && <Check size={15} className="green" />}
-        {c.title}
-      </div>
+      <div className="card-title">{c.title}</div>
       <div className="card-meta">
         {c.due_date && (
           <span
+            data-tooltip={
+              (c.completed
+                ? "Completed"
+                : "Due " +
+                  new Date(c.due_date + "T12:00:00").toLocaleDateString(
+                    undefined,
+                    {
+                      weekday: "long",
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    },
+                  )) +
+              (c.due_date < today() && !c.completed ? " · Overdue" : "")
+            }
             className={
               "due " +
               (c.completed ? "complete" : c.due_date < today() ? "late" : "")
@@ -1009,15 +1054,25 @@ function CardFace({ c, members }: { c: Card; members: Member[] }) {
             {dateLabel(c.due_date)}
           </span>
         )}
-        {c.description && <AlignLeft size={14} aria-label="Has description" />}
+        {c.description && (
+          <span data-tooltip="This card has a description">
+            <AlignLeft size={14} aria-label="Has description" />
+          </span>
+        )}
         {c.comment_count > 0 && (
-          <span>
+          <span
+            data-tooltip={`${c.comment_count} ${c.comment_count === 1 ? "comment" : "comments"}`}
+            aria-label={`${c.comment_count} comments`}
+          >
             <MessageSquare size={13} />
             {c.comment_count}
           </span>
         )}
         {c.attachment_count > 0 && (
-          <span>
+          <span
+            data-tooltip={`${c.attachment_count} ${c.attachment_count === 1 ? "attachment" : "attachments"}`}
+            aria-label={`${c.attachment_count} attachments`}
+          >
             <Paperclip size={13} />
             {c.attachment_count}
           </span>
@@ -1033,14 +1088,18 @@ function CardFace({ c, members }: { c: Card; members: Member[] }) {
 }
 function AddCard({
   list,
+  before,
+  close,
   create,
   details,
 }: {
   list: Column;
+  before?: string;
+  close?: () => void;
   create: (data: Record<string, unknown>) => Promise<Card>;
   details: (seed: NewCardSeed) => void;
 }) {
-  const [editing, setEditing] = useState(false),
+  const [editing, setEditing] = useState(!!before),
     [title, setTitle] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -1052,14 +1111,14 @@ function AddCard({
     setBusy(true);
     setError("");
     try {
-      await create({ title: title.trim(), list_id: list.name });
+      await create({ title: title.trim(), list_id: list.name, before });
       setTitle("");
       requestAnimationFrame(() => {
         field.current?.focus();
         const stack = field.current
           ?.closest(".column")
           ?.querySelector(".card-stack");
-        if (stack) stack.scrollTop = stack.scrollHeight;
+        if (stack && !before) stack.scrollTop = stack.scrollHeight;
       });
     } catch (e) {
       setError((e as Error).message);
@@ -1095,6 +1154,7 @@ function AddCard({
           if (e.key === "Escape") {
             e.preventDefault();
             setEditing(false);
+            close?.();
           }
         }}
       />
@@ -1112,8 +1172,9 @@ function AddCard({
           className="subtle"
           disabled={busy}
           onClick={() => {
-            details({ list_id: list.name, title });
+            details({ list_id: list.name, title, before });
             setEditing(false);
+            close?.();
           }}
         >
           Details
@@ -1123,7 +1184,10 @@ function AddCard({
           type="button"
           disabled={busy}
           aria-label="Cancel card"
-          onClick={() => setEditing(false)}
+          onClick={() => {
+            setEditing(false);
+            close?.();
+          }}
         >
           <X size={19} />
         </button>
@@ -1191,6 +1255,7 @@ function CardComposer({
             const c = await create({
               title: title.trim(),
               list_id: list,
+              before: list === seed.list_id ? seed.before : undefined,
               start_date: start || null,
               due_date: due || null,
               description,
@@ -1382,6 +1447,35 @@ function CardModal({
       }
     }
   };
+  const toggleComplete = async () => {
+    if (!data || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const d = await api<Detail>(
+        "save_card",
+        {
+          data: {
+            name,
+            modified: data.card.modified,
+            completed: data.card.completed ? 0 : 1,
+          },
+        },
+        true,
+      );
+      setData(d);
+      setDraft((current: any) => ({
+        ...current,
+        completed: d.card.completed,
+        modified: d.card.modified,
+      }));
+      await refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
   const safeClose = () => {
     if (dirty || comment || commentFiles.length) {
       if (!window.confirm("Discard your unsaved changes?")) return;
@@ -1405,7 +1499,25 @@ function CardModal({
       {data && (
         <>
           <div className="card-modal-title">
-            <LayoutDashboard size={21} />
+            <button
+              className={
+                "detail-complete-control " +
+                (data.card.completed ? "is-complete" : "")
+              }
+              aria-label={
+                data.card.completed
+                  ? "Mark card incomplete"
+                  : "Mark card complete"
+              }
+              aria-pressed={!!data.card.completed}
+              data-tooltip={
+                data.card.completed ? "Mark incomplete" : "Mark complete"
+              }
+              disabled={busy}
+              onClick={() => void toggleComplete()}
+            >
+              {data.card.completed ? <Check size={17} /> : null}
+            </button>
             <div>
               <input
                 aria-label="Card title"

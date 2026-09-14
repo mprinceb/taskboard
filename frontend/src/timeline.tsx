@@ -21,6 +21,7 @@ import {
   packCards,
 } from "./planning";
 export type NewCardSeed = {
+  before?: string;
   list_id?: string;
   start_date?: string;
   due_date?: string;
@@ -507,7 +508,7 @@ export function Timeline(p: Props) {
                                   <button
                                     className="range-handle start-handle"
                                     aria-label={"Resize start of " + c.title}
-                                    title="Drag start date · Left/Right arrow to adjust"
+                                    data-tooltip="Drag start date · Left/Right arrow to adjust"
                                     disabled={p.busy}
                                     onPointerDown={(e) =>
                                       begin(e, "start", list.name, c)
@@ -518,7 +519,7 @@ export function Timeline(p: Props) {
                                 <button
                                   className="range-body"
                                   aria-label={"Schedule " + c.title}
-                                  title={`${c.title}: ${label(range.start)} – ${label(range.end)}. Drag to move; arrow keys move one day, Shift moves one week.`}
+                                  data-tooltip={`${c.title}: ${label(range.start)} – ${label(range.end)}. Drag to move; arrow keys move one day, Shift moves one week.`}
                                   disabled={p.busy}
                                   onPointerDown={(e) =>
                                     begin(e, "move", list.name, c)
@@ -534,7 +535,7 @@ export function Timeline(p: Props) {
                                   <button
                                     className="range-handle end-handle"
                                     aria-label={"Resize due date of " + c.title}
-                                    title="Drag due date · Left/Right arrow to adjust"
+                                    data-tooltip="Drag due date · Left/Right arrow to adjust"
                                     disabled={p.busy}
                                     onPointerDown={(e) =>
                                       begin(e, "end", list.name, c)
@@ -605,7 +606,7 @@ export function Timeline(p: Props) {
                 onClick={() => {
                   if (!suppress.current) p.open(c.name);
                 }}
-                title="Drag onto the timeline"
+                data-tooltip="Drag onto the timeline"
               >
                 <GripVertical size={14} />
                 {c.title}
@@ -614,7 +615,7 @@ export function Timeline(p: Props) {
                 className="icon"
                 disabled={p.busy}
                 aria-label={"Schedule " + c.title + " for today"}
-                title="Schedule for today"
+                data-tooltip="Schedule for today"
                 onClick={() => {
                   setAnchor(localToday());
                   void p.save(c, {
