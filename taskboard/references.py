@@ -6,11 +6,33 @@ import frappe
 from taskboard.permissions import membership
 
 REFERENCE_RE = re.compile(r"#\[([^\]\s]+)\]")
+# Mirror of the frontend's code-span rules (frontend/src/cardrefs.ts mapOutsideCode)
+# so a token inside Markdown code is neither rendered nor stored as a link.
+FENCE_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
+INLINE_CODE_RE = re.compile(r"(`+)(?!`)[\s\S]*?[^`]\1(?!`)")
+
+
+def _outside_code(text):
+    """Yield each line of `text` with fenced blocks and inline code removed."""
+    fence = ""
+    for line in (text or "").split("\n"):
+        m = FENCE_RE.match(line)
+        if fence:
+            if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence):
+                fence = ""
+            continue
+        if m:
+            fence = m.group(1)
+            continue
+        yield INLINE_CODE_RE.sub(" ", line)
 
 
 def parse_references(text):
-    """Distinct referenced ids in first-appearance order."""
-    return list(dict.fromkeys(REFERENCE_RE.findall(text or "")))
+    """Distinct referenced ids outside Markdown code, in first-appearance order."""
+    found = []
+    for plain in _outside_code(text):
+        found.extend(REFERENCE_RE.findall(plain))
+    return list(dict.fromkeys(found))
 
 
 def sync_links(card, text, source, source_name=None):

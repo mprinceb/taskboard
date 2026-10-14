@@ -887,6 +887,7 @@ function App() {
       )}
       {card && (
         <CardModal
+          key={card}
           name={card}
           board={board}
           close={() => openCard(null)}
@@ -1276,7 +1277,7 @@ function CardFace({
   const check = c.description
     ? checklistProgress(c.description, (id) => {
         const t = cardsById.get(id);
-        return !!t && doneLists.has(t.list_id);
+        return !!t && (doneLists.has(t.list_id) || !!t.completed);
       })
     : { done: 0, total: 0 };
   return (

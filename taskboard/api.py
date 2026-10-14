@@ -473,6 +473,7 @@ def save_comment(card, content, name=None):
     content = (content or "").strip()
     if not content or len(content) > 20000:
         frappe.throw("Comment must be 1–20,000 characters.")
+    previous_mentions = set()
     if name:
         comment = frappe.get_doc("Comment", name)
         if (
@@ -481,6 +482,7 @@ def save_comment(card, content, name=None):
             or comment.owner != frappe.session.user
         ):
             frappe.throw("You can only edit your own comments.", frappe.PermissionError)
+        previous_mentions = set(re.findall(r"@\[([^\]]+)\]", comment.content or ""))
         comment.content = escape(content)
         comment.save(ignore_permissions=True)
     else:
@@ -507,7 +509,11 @@ def save_comment(card, content, name=None):
                 f"mention:{comment.name}:{user}",
                 f"You were mentioned in a comment on {doc.title}.",
             )
-    notify_references(doc, added, f"comment:{comment.name}", mentioned)
+    # A mention that already existed before this edit sends no new notice, so it
+    # must not suppress the reference notice either.
+    notify_references(
+        doc, added, f"comment:{comment.name}", mentioned - previous_mentions
+    )
     publish_change(card)
     return comment.name
 

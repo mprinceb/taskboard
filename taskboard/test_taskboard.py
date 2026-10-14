@@ -390,6 +390,17 @@ class TestTaskboard(unittest.TestCase):
         )
         self.assertEqual(parse_references(None), [])
 
+    def test_parse_references_ignores_markdown_code(self):
+        from taskboard.references import parse_references
+
+        text = (
+            "real #[aaa111] and `#[bbb222]` and ``a #[ccc333] b``\n"
+            "```\n#[ddd444]\n```\n"
+            "~~~js\n#[eee555]\n~~~\n"
+            "after #[fff666]"
+        )
+        self.assertEqual(parse_references(text), ["aaa111", "fff666"])
+
     def test_sync_idempotent_and_ignores_invalid(self):
         a, b = self.card(), self.card(title="Target")
         text = f"See #[{b.name}] and #[{b.name}] and #[{a.name}] and #[nope123456]"
@@ -516,3 +527,21 @@ class TestTaskboard(unittest.TestCase):
         self.assertEqual(count, 2)
         api.save_comment(src.name, f"#[{target.name}] edit", name=name)
         self.assertEqual(frappe.db.count("TB Notice", kind), count)
+
+    def test_edit_adding_reference_not_suppressed_by_old_mention(self):
+        src = self.card(title="Source")
+        target = self.card(title="Target", assignees=[self.member])
+        name = api.save_comment(src.name, f"hello @[{self.member}]")
+        kind = {"kind": "card_reference", "card": src.name}
+        self.assertEqual(frappe.db.count("TB Notice", kind), 0)
+        # The mention existed before the edit, so only the reference is new.
+        api.save_comment(
+            src.name, f"hello @[{self.member}] #[{target.name}]", name=name
+        )
+        self.assertEqual(
+            frappe.db.count("TB Notice", {**kind, "recipient": self.member}), 1
+        )
+        self.assertEqual(
+            frappe.db.count("TB Notice", {"kind": "Mention", "card": src.name}), 1
+        )
+
