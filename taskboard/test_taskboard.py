@@ -612,3 +612,15 @@ class TestTaskboard(unittest.TestCase):
         self.assertEqual(parse_references("- a `x\n- b y` #[ccc333]"), ["ccc333"])
         self.assertEqual(parse_references("`x\n\n#[ddd444]\n\ny`"), ["ddd444"])
 
+    def test_editing_comment_keeps_row_for_deleted_target(self):
+        src, target = self.card(title="Source"), self.card(title="Gone")
+        name = api.save_comment(src.name, f"see #[{target.name}]")
+        frappe.delete_doc("TB Card", target.name, force=True, ignore_permissions=True)
+        api.save_comment(src.name, f"see #[{target.name}] edited", name=name)
+        self.assertEqual(len(self.links(from_card=src.name)), 1)
+        row = next(c for c in api.board()["cards"] if c["name"] == src.name)
+        self.assertEqual([r["exists"] for r in row["references"]], [False])
+        # Removing the token drops the retained row.
+        api.save_comment(src.name, "no reference", name=name)
+        self.assertEqual(len(self.links(from_card=src.name)), 0)
+

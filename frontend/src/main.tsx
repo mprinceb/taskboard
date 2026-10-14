@@ -1787,6 +1787,25 @@ function CardModal({
       return r ? [{ ...r, exists: false }] : [];
     });
   };
+  // Backlinks come from the detail payload; reconcile with the live board so a
+  // renamed, moved or archived source updates and a deleted one disappears.
+  const liveBacklinks: Backlink[] = (() => {
+    const items = (data?.backlinks || []).flatMap((b: Backlink): Backlink[] => {
+      const c = board.cards.find((x) => x.name === b.name);
+      if (!c) return [];
+      const l = board.lists.find((x) => x.name === c.list_id);
+      return [
+        {
+          ...b,
+          title: c.title,
+          list_title: l?.title || b.list_title,
+          archived: !!c.archived,
+        },
+      ];
+    });
+    const active = items.filter((i) => !i.archived);
+    return active.length ? active : items;
+  })();
   const safeClose = () => {
     if (dirty || comment || commentFiles.length) {
       if (!window.confirm("Discard your unsaved changes?")) return;
@@ -2014,14 +2033,14 @@ function CardModal({
                   </div>
                 )}
               </form>
-              {(data.backlinks || []).length > 0 && (
+              {liveBacklinks.length > 0 && (
                 <section className="backlinks" aria-label="Mentioned in">
                   <div className="section-heading">
                     <Link2 size={18} />
                     <h3>Mentioned in</h3>
                   </div>
                   <ul>
-                    {(data.backlinks || []).map((b: Backlink) => (
+                    {liveBacklinks.map((b: Backlink) => (
                       <li key={b.name}>
                         <button
                           type="button"

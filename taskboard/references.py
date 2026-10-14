@@ -99,13 +99,18 @@ def parse_references(text):
 def sync_links(card, text, source, source_name=None):
     """Make TB Card Link rows for one source match `text`. Returns newly added ids."""
     source_name = source_name or ""
-    wanted = [r for r in parse_references(text) if r != card]
-    if wanted:
+    tokens = [r for r in parse_references(text) if r != card]
+    wanted = tokens
+    if tokens:
         # One query instead of one existence check per token.
         real = set(
-            frappe.get_all("TB Card", filters={"name": ["in", wanted]}, pluck="name")
+            frappe.get_all("TB Card", filters={"name": ["in", tokens]}, pluck="name")
         )
-        wanted = [r for r in wanted if r in real]
+        wanted = [r for r in tokens if r in real]
+    # A token whose target was deleted keeps its existing row (the board reads
+    # comment references from this table and shows an "unavailable" entry), but
+    # no new row is created for it.
+    keep = set(tokens)
     existing = frappe.get_all(
         "TB Card Link",
         filters={"from_card": card, "source": source, "source_name": source_name},
@@ -115,7 +120,7 @@ def sync_links(card, text, source, source_name=None):
     have = set()
     for row in existing:
         # Remove stale rows and any duplicates left by concurrent saves.
-        if row.to_card in wanted and row.to_card not in have:
+        if row.to_card in keep and row.to_card not in have:
             have.add(row.to_card)
         else:
             frappe.delete_doc(
