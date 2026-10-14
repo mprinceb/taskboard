@@ -23,9 +23,8 @@
     },
     {
       "fieldname": "to_card",
-      "fieldtype": "Link",
+      "fieldtype": "Data",
       "label": "To Card",
-      "options": "TB Card",
       "reqd": 1,
       "search_index": 1
     },

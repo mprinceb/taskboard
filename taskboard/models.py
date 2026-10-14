@@ -34,9 +34,10 @@ class Card(Document):
             )
 
     def on_trash(self):
+        # Only this card's outgoing links go. Incoming rows are kept (to_card is
+        # a plain Data field) so a comment that still references a deleted card
+        # keeps resolving to an "unavailable" entry without rescanning comments.
         for name in frappe.get_all(
-            "TB Card Link",
-            or_filters={"from_card": self.name, "to_card": self.name},
-            pluck="name",
+            "TB Card Link", filters={"from_card": self.name}, pluck="name"
         ):
             frappe.delete_doc("TB Card Link", name, ignore_permissions=True, force=True)

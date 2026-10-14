@@ -587,3 +587,19 @@ class TestTaskboard(unittest.TestCase):
         api.save_comment(src.name, f"#[{target.name}] back again", name=name)
         self.assertEqual(frappe.db.count("TB Notice", kind), 2)
 
+    def test_indented_code_is_ignored_but_list_continuation_is_not(self):
+        from taskboard.references import parse_references
+
+        text = "para\n\n    #[aaa111]\n\n- item\n\n    #[bbb222]\n\nafter #[ccc333]"
+        self.assertEqual(parse_references(text), ["bbb222", "ccc333"])
+        self.assertEqual(parse_references("    #[ddd444]"), [])
+
+    def test_deleted_target_keeps_incoming_rows_and_backlinks_cleaned(self):
+        a, b = self.card(title="A"), self.card(title="B")
+        api.save_comment(a.name, f"see #[{b.name}]")
+        api.save_card({"name": b.name, "description": f"back #[{a.name}]"})
+        frappe.delete_doc("TB Card", b.name, force=True, ignore_permissions=True)
+        # Incoming (A -> B) kept so board can show "unavailable"; B's own links go.
+        self.assertEqual(len(self.links(from_card=a.name)), 1)
+        self.assertEqual(len(self.links(from_card=b.name)), 0)
+

@@ -1760,28 +1760,31 @@ function CardModal({
     }
     open(id);
   };
-  // Server references first; fall back to cards in client state so freshly
-  // inserted (not yet saved) references still resolve in the preview.
+  // Live board state wins for cards still on the board (renames, moves,
+  // completion and archiving show immediately, and freshly inserted unsaved
+  // references resolve). A target missing from the board is deleted or
+  // inaccessible, so show the server entry as unavailable.
   const refsFor = (text: string): CardRef[] => {
     const known = new Map((data?.references || []).map((r) => [r.name, r]));
-    return extractIds(text || "").flatMap((id) => {
-      const r = known.get(id);
-      if (r) return [r];
+    return extractIds(text || "").flatMap((id): CardRef[] => {
       const c = board.cards.find((x) => x.name === id);
-      if (!c) return [];
-      const l = board.lists.find((x) => x.name === c.list_id);
-      return [
-        {
-          name: c.name,
-          title: c.title,
-          list_id: c.list_id,
-          list_title: l?.title || "",
-          is_done: !!l?.is_done || !!c.completed,
-          completed: !!c.completed,
-          archived: !!c.archived,
-          exists: true,
-        },
-      ];
+      if (c) {
+        const l = board.lists.find((x) => x.name === c.list_id);
+        return [
+          {
+            name: c.name,
+            title: c.title,
+            list_id: c.list_id,
+            list_title: l?.title || "",
+            is_done: !!l?.is_done || !!c.completed,
+            completed: !!c.completed,
+            archived: !!c.archived,
+            exists: true,
+          },
+        ];
+      }
+      const r = known.get(id);
+      return r ? [{ ...r, exists: false }] : [];
     });
   };
   const safeClose = () => {

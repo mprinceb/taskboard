@@ -25,30 +25,64 @@ export type Backlink = {
   archived: boolean;
 };
 
-/** Apply `fn` to the parts of `text` outside fenced blocks and inline code spans. */
+const LIST_RE = /^\s{0,3}(?:[-*+]|\d{1,9}[.)])\s/;
+const INDENT_RE = /^(?: {4,}|\t)/;
+
+/**
+ * Which lines are Markdown code (fenced blocks including their fences, and
+ * indented code blocks). An indented line is code only after a blank line or
+ * another code line and outside a list, where it is list continuation.
+ */
+export function codeLineMask(lines: string[]): boolean[] {
+  let fence = "",
+    prevBlank = true,
+    inIndented = false,
+    inList = false;
+  return lines.map((line) => {
+    const m = FENCE_RE.exec(line);
+    if (fence) {
+      if (
+        m &&
+        m[1][0] === fence[0] &&
+        m[1].length >= fence.length &&
+        !line.slice(m[0].length).trim()
+      ) {
+        fence = "";
+        prevBlank = true;
+      }
+      return true;
+    }
+    if (m) {
+      fence = m[1];
+      inIndented = false;
+      prevBlank = false;
+      return true;
+    }
+    const blank = !line.trim();
+    const indented = !blank && INDENT_RE.test(line);
+    let code = false;
+    if (indented && (prevBlank || inIndented) && !inList) {
+      code = true;
+      inIndented = true;
+    } else if (!blank) {
+      inIndented = false;
+      if (!indented) inList = LIST_RE.test(line);
+    }
+    prevBlank = blank;
+    return code;
+  });
+}
+
+/** Apply `fn` to the parts of `text` outside code blocks and inline code spans. */
 export function mapOutsideCode(
   text: string,
   fn: (plain: string) => string,
 ): string {
-  let fence = "";
-  return text
-    .split("\n")
-    .map((line) => {
-      const m = FENCE_RE.exec(line);
-      if (fence) {
-        if (
-          m &&
-          m[1][0] === fence[0] &&
-          m[1].length >= fence.length &&
-          !line.slice(m[0].length).trim()
-        )
-          fence = "";
-        return line;
-      }
-      if (m) {
-        fence = m[1];
-        return line;
-      }
+  const lines = text.split("\n");
+  const mask = codeLineMask(lines);
+  return lines
+    .map((line, i) => {
+      if (mask[i]) return line;
       let out = "",
         last = 0;
       for (const code of line.matchAll(INLINE_CODE_RE)) {
@@ -91,27 +125,10 @@ function eachChecklist(
   text: string,
   fn: (line: string, item: ChecklistLine | null) => string,
 ): string {
-  let fence = "";
-  return (text || "")
-    .split("\n")
-    .map((line) => {
-      const m = FENCE_RE.exec(line);
-      if (fence) {
-        if (
-          m &&
-          m[1][0] === fence[0] &&
-          m[1].length >= fence.length &&
-          !line.slice(m[0].length).trim()
-        )
-          fence = "";
-        return line;
-      }
-      if (m) {
-        fence = m[1];
-        return line;
-      }
-      return fn(line, parseChecklistLine(line));
-    })
+  const lines = (text || "").split("\n");
+  const mask = codeLineMask(lines);
+  return lines
+    .map((line, i) => (mask[i] ? line : fn(line, parseChecklistLine(line))))
     .join("\n");
 }
 

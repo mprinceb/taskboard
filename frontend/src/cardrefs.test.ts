@@ -82,3 +82,10 @@ test("a fence is only closed by a clean closing line", () => {
   const text = "~~~\n#[aaa111]\n~~~ trailing\n#[bbb222]\n~~~\n#[ccc333]";
   assert.deepEqual(extractIds(text), ["ccc333"]);
 });
+
+test("indented code is ignored but list continuation is not", () => {
+  const text =
+    "para\n\n    #[aaa111]\n\n- item\n\n    #[bbb222]\n\nafter #[ccc333]";
+  assert.deepEqual(extractIds(text), ["bbb222", "ccc333"]);
+  assert.deepEqual(extractIds("    #[ddd444]"), []);
+});

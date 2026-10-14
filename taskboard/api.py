@@ -125,16 +125,14 @@ def board():
     )
     card_map = {c.name: c for c in cards}
     list_map = {r.name: r for r in lists}
-    # One batched query for comment references; description tokens are parsed in
-    # memory. Parse the comment text (as detail() does) rather than reading the
-    # link table so a reference to a deleted card still yields its
-    # "unavailable" entry here too.
+    # One indexed query for comment references (the link table is kept in sync on
+    # save and keeps rows for deleted targets); description tokens are parsed in
+    # memory. No comment bodies are rescanned on the 15s board poll.
     comment_refs = {}
     for row in frappe.db.sql(
-        "SELECT reference_name,content FROM tabComment WHERE reference_doctype='TB Card' "
-        "AND comment_type='Comment' AND content LIKE '%%#[%%' ORDER BY creation,name"
+        "SELECT from_card,to_card FROM `tabTB Card Link` WHERE source='comment' ORDER BY creation,name"
     ):
-        comment_refs.setdefault(row[0], []).extend(parse_references(row[1]))
+        comment_refs.setdefault(row[0], []).append(row[1])
     for card in cards:
         card["references"] = reference_payload(
             [

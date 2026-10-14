@@ -15,10 +15,18 @@ FENCE_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
 INLINE_CODE_RE = re.compile(r"(`+)(?!`)[\s\S]*?[^`]\1(?!`)")
 
 
-def _outside_code(text):
-    """Yield each line of `text` with fenced blocks and inline code removed."""
-    fence = ""
-    for line in (text or "").split("\n"):
+LIST_RE = re.compile(r"^\s{0,3}(?:[-*+]|\d{1,9}[.)])\s")
+INDENT_RE = re.compile(r"^(?: {4,}|\t)")
+
+
+def _code_mask(lines):
+    """True for lines that are Markdown code: fenced blocks (with their fences)
+    and indented code blocks. An indented line is code only after a blank line
+    or another code line and outside a list, where it is list continuation.
+    Mirrors `codeLineMask` in frontend/src/cardrefs.ts."""
+    fence, prev_blank, in_indented, in_list = "", True, False, False
+    mask = []
+    for line in lines:
         m = FENCE_RE.match(line)
         if fence:
             # A closing fence is the same character, at least as long, and
@@ -30,11 +38,33 @@ def _outside_code(text):
                 and not line[m.end():].strip()
             ):
                 fence = ""
+                prev_blank = True
+            mask.append(True)
             continue
         if m:
-            fence = m.group(1)
+            fence, in_indented, prev_blank = m.group(1), False, False
+            mask.append(True)
             continue
-        yield INLINE_CODE_RE.sub(" ", line)
+        blank = not line.strip()
+        indented = not blank and bool(INDENT_RE.match(line))
+        code = False
+        if indented and (prev_blank or in_indented) and not in_list:
+            code = in_indented = True
+        elif not blank:
+            in_indented = False
+            if not indented:
+                in_list = bool(LIST_RE.match(line))
+        prev_blank = blank
+        mask.append(code)
+    return mask
+
+
+def _outside_code(text):
+    """Yield each non-code line of `text` with inline code spans removed."""
+    lines = (text or "").split("\n")
+    for line, code in zip(lines, _code_mask(lines)):
+        if not code:
+            yield INLINE_CODE_RE.sub(" ", line)
 
 
 def parse_references(text):
