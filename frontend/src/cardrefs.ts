@@ -36,7 +36,12 @@ export function mapOutsideCode(
     .map((line) => {
       const m = FENCE_RE.exec(line);
       if (fence) {
-        if (m && m[1][0] === fence[0] && m[1].length >= fence.length)
+        if (
+          m &&
+          m[1][0] === fence[0] &&
+          m[1].length >= fence.length &&
+          !line.slice(m[0].length).trim()
+        )
           fence = "";
         return line;
       }
@@ -92,7 +97,12 @@ function eachChecklist(
     .map((line) => {
       const m = FENCE_RE.exec(line);
       if (fence) {
-        if (m && m[1][0] === fence[0] && m[1].length >= fence.length)
+        if (
+          m &&
+          m[1][0] === fence[0] &&
+          m[1].length >= fence.length &&
+          !line.slice(m[0].length).trim()
+        )
           fence = "";
         return line;
       }

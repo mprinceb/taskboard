@@ -77,3 +77,8 @@ test("syncChecklist and progress reflect referenced cards, not literals", () => 
   assert.deepEqual(checklistProgress(text, done), { done: 1, total: 3 });
   assert.deepEqual(checklistProgress("no list", done), { done: 0, total: 0 });
 });
+
+test("a fence is only closed by a clean closing line", () => {
+  const text = "~~~\n#[aaa111]\n~~~ trailing\n#[bbb222]\n~~~\n#[ccc333]";
+  assert.deepEqual(extractIds(text), ["ccc333"]);
+});

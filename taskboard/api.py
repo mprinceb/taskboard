@@ -373,6 +373,9 @@ def move_card(name, list_id, before=None, modified=None):
 def notify_references(doc, added, key, mentioned=()):
     """Notify assignees of newly referenced cards, skipping the actor and @mentioned users."""
     skip = set(mentioned) | {frappe.session.user}
+    # `added` already means "newly added by this save", so make each addition its
+    # own event: a reference removed and later re-added must notify again.
+    stamp = frappe.utils.now_datetime().isoformat()
     for target in added:
         card = frappe.db.get_value(
             "TB Card", target, ["name", "title"], as_dict=True
@@ -389,7 +392,7 @@ def notify_references(doc, added, key, mentioned=()):
                 "card_reference",
                 message,
                 f'<p>{escape(message)}</p><p><a href="{escape(app_url("/taskboard?card=" + doc.name))}">{escape(doc.title)}</a></p>',
-                f"reference:{key}:{target}:{user}",
+                f"reference:{key}:{target}:{user}:{stamp}",
                 card=doc.name,
             )
 

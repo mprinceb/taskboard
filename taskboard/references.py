@@ -21,7 +21,14 @@ def _outside_code(text):
     for line in (text or "").split("\n"):
         m = FENCE_RE.match(line)
         if fence:
-            if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence):
+            # A closing fence is the same character, at least as long, and
+            # followed only by whitespace (CommonMark); "~~~ x" does not close.
+            if (
+                m
+                and m.group(1)[0] == fence[0]
+                and len(m.group(1)) >= len(fence)
+                and not line[m.end():].strip()
+            ):
                 fence = ""
             continue
         if m:

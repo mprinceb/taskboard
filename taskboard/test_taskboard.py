@@ -568,3 +568,22 @@ class TestTaskboard(unittest.TestCase):
         detail = api.detail(src.name)
         self.assertEqual([r["exists"] for r in detail["references"]], [False])
 
+    def test_fence_needs_clean_closer(self):
+        from taskboard.references import parse_references
+
+        text = "~~~\n#[aaa111]\n~~~ trailing\n#[bbb222]\n~~~\n#[ccc333]"
+        self.assertEqual(parse_references(text), ["ccc333"])
+
+    def test_readded_comment_reference_notifies_again(self):
+        src = self.card(title="Source")
+        target = self.card(title="Target", assignees=[self.member])
+        kind = {"kind": "card_reference", "card": src.name, "recipient": self.member}
+        name = api.save_comment(src.name, f"#[{target.name}]")
+        self.assertEqual(frappe.db.count("TB Notice", kind), 1)
+        api.save_comment(src.name, "removed", name=name)
+        api.save_comment(src.name, f"#[{target.name}] back", name=name)
+        self.assertEqual(frappe.db.count("TB Notice", kind), 2)
+        # Saving without changing the reference must not notify.
+        api.save_comment(src.name, f"#[{target.name}] back again", name=name)
+        self.assertEqual(frappe.db.count("TB Notice", kind), 2)
+
