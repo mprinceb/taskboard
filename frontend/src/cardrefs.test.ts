@@ -1,4 +1,5 @@
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import {
   extractIds,
@@ -126,3 +127,16 @@ test("checklist progress ignores tokens that never named a card", () => {
     { done: 0, total: 1 },
   );
 });
+
+// The backend runs the same fixture (taskboard/test_taskboard.py), so the two
+// parsers cannot silently drift.
+const shared = JSON.parse(
+  readFileSync(
+    new URL("../../tests/reference_cases.json", import.meta.url),
+    "utf8",
+  ),
+) as { name: string; text: string; ids: string[] }[];
+for (const c of shared)
+  test("shared case: " + c.name, () => {
+    assert.deepEqual(extractIds(c.text), c.ids);
+  });

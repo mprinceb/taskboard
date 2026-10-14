@@ -660,3 +660,19 @@ class TestTaskboard(unittest.TestCase):
         # The deleted target keeps its "unavailable" entry; the typo still has none.
         self.assertEqual([(r["name"], r["exists"]) for r in refs], [(b.name, False)])
 
+    def test_shared_reference_cases(self):
+        """The frontend runs the same fixture (frontend/src/cardrefs.test.ts)."""
+        import json
+        import os
+
+        from taskboard.references import parse_references
+
+        path = os.path.join(
+            os.path.dirname(__file__), "..", "tests", "reference_cases.json"
+        )
+        with open(path) as f:
+            cases = json.load(f)
+        for case in cases:
+            with self.subTest(case["name"]):
+                self.assertEqual(parse_references(case["text"]), case["ids"])
+

@@ -1,10 +1,13 @@
 // Pure helpers for `#[card_name]` card references. No React or DOM here.
+import { fromMarkdown } from "mdast-util-from-markdown";
+import { gfmFromMarkdown } from "mdast-util-gfm";
+import { gfm } from "micromark-extension-gfm";
+
 export const REF_SOURCE = "#\\[([a-z0-9]{6,20})\\]";
 const REF_RE = () => new RegExp(REF_SOURCE, "g");
 const CHECK_RE = new RegExp(
   "^(\\s*[-*+]\\s+)\\[([ xX])\\](\\s+)" + REF_SOURCE + "\\s*$",
 );
-const INLINE_CODE_RE = /(`+)(?!`)[\s\S]*?[^`]\1(?!`)/g;
 
 export type CardRef = {
   name: string;
@@ -24,135 +27,68 @@ export type Backlink = {
   archived: boolean;
 };
 
-const LIST_RE = /^\s{0,3}(?:[-*+]|\d{1,9}[.)])\s/;
-const INDENT_RE = /^(?: {4,}|\t)/;
+// "What is code / prose" is decided by the same parser the renderer uses
+// (react-markdown + remark-gfm), never re-derived by hand.
+type MdNode = {
+  type: string;
+  children?: MdNode[];
+  position?: {
+    start: { line: number; offset?: number };
+    end: { line: number; offset?: number };
+  };
+};
+const parseMarkdown = (text: string): MdNode =>
+  fromMarkdown(text, {
+    extensions: [gfm()],
+    mdastExtensions: [gfmFromMarkdown()],
+  }) as unknown as MdNode;
 
-const QUOTE_RE = /^\s{0,3}(?:>\s?)+/;
-const LIST_PREFIX_RE = /^\s*(?:[-*+]|\d{1,9}[.)])\s+/;
-type Fence = { marker: string; rest: string; quoted: boolean; nested: boolean };
+// Text inside these is link text / alt text, not a place for card references.
+const NO_REFS_INSIDE = new Set([
+  "link",
+  "linkReference",
+  "image",
+  "imageReference",
+]);
 
-/**
- * Match a code fence on `line`, including fences nested in a blockquote or a
- * list item (`> ```` / `- ````), where indentation is not limited to 3.
- */
-function fenceOf(line: string, inList: boolean): Fence | null {
-  const q = QUOTE_RE.exec(line);
-  const body = q ? line.slice(q[0].length) : line;
-  const loose = !!q || inList;
-  let m = (
-    loose ? /^\s*(`{3,}|~{3,})(.*)$/ : /^\s{0,3}(`{3,}|~{3,})(.*)$/
-  ).exec(body);
-  let nested = loose;
-  if (!m) {
-    const lm = LIST_PREFIX_RE.exec(body);
-    if (lm) {
-      m = /^(`{3,}|~{3,})(.*)$/.exec(body.slice(lm[0].length));
-      nested = true;
-    }
-  }
-  return m ? { marker: m[1], rest: m[2], quoted: !!q, nested } : null;
-}
-
-/**
- * Which lines are Markdown code (fenced blocks including their fences, and
- * indented code blocks). An indented line is code only after a blank line or
- * another code line and outside a list, where it is list continuation. A fence
- * opened inside a blockquote ends where the quote does.
- */
+/** Which lines belong to a code block (fenced or indented). */
 export function codeLineMask(lines: string[]): boolean[] {
-  let fence = "",
-    fenceQuoted = false,
-    fenceNested = false,
-    prevBlank = true,
-    inIndented = false,
-    inList = false;
-  return lines.map((line) => {
-    if (fence && fenceQuoted && !QUOTE_RE.test(line)) {
-      fence = "";
-      fenceQuoted = false;
-      prevBlank = true;
-    }
-    if (fence) {
-      const c = fenceOf(line, fenceNested);
-      if (
-        c &&
-        c.marker[0] === fence[0] &&
-        c.marker.length >= fence.length &&
-        !c.rest.trim()
-      ) {
-        fence = "";
-        fenceQuoted = false;
-        prevBlank = true;
-      }
-      return true;
-    }
-    const o = fenceOf(line, inList);
-    if (o && !(o.marker[0] === "`" && o.rest.includes("`"))) {
-      fence = o.marker;
-      fenceQuoted = o.quoted;
-      fenceNested = o.nested;
-      inIndented = false;
-      prevBlank = false;
-      return true;
-    }
-    const blank = !line.trim();
-    const indented = !blank && INDENT_RE.test(line);
-    let code = false;
-    if (indented && (prevBlank || inIndented) && !inList) {
-      code = true;
-      inIndented = true;
-    } else if (!blank) {
-      inIndented = false;
-      if (!indented) inList = LIST_RE.test(line);
-    }
-    prevBlank = blank;
-    return code;
-  });
-}
-
-// A new block starts here, so an inline code span cannot continue across it.
-const BLOCK_START_RE =
-  /^\s{0,3}(?:[-*+]|\d{1,9}[.)])\s|^\s{0,3}#{1,6}(?:\s|$)|^\s{0,3}>/;
-
-function mapInline(chunk: string, fn: (plain: string) => string): string {
-  let out = "",
-    last = 0;
-  for (const code of chunk.matchAll(INLINE_CODE_RE)) {
-    out += fn(chunk.slice(last, code.index)) + code[0];
-    last = code.index! + code[0].length;
-  }
-  return out + fn(chunk.slice(last));
+  const mask = lines.map(() => false);
+  const walk = (n: MdNode) => {
+    if (n.type === "code" && n.position)
+      for (let l = n.position.start.line; l <= n.position.end.line; l++)
+        mask[l - 1] = true;
+    n.children?.forEach(walk);
+  };
+  walk(parseMarkdown(lines.join("\n")));
+  return mask;
 }
 
 /**
- * Apply `fn` to the parts of `text` outside code blocks and inline code spans.
- * Inline spans may cross line breaks within a paragraph (CommonMark), so
- * consecutive plain lines are matched together; blank lines, code lines and
- * new block starts end a paragraph.
+ * Apply `fn` to the source of each prose text run in `text` (not code blocks,
+ * inline code, raw HTML or link text) and leave everything else untouched.
  */
 export function mapOutsideCode(
   text: string,
   fn: (plain: string) => string,
 ): string {
-  const lines = text.split("\n");
-  const mask = codeLineMask(lines);
-  const out: string[] = [];
-  let chunk: string[] = [];
-  const flush = () => {
-    if (chunk.length) out.push(mapInline(chunk.join("\n"), fn));
-    chunk = [];
+  const runs: [number, number][] = [];
+  const walk = (n: MdNode, blocked: boolean) => {
+    if (n.type === "text" && !blocked && n.position)
+      runs.push([n.position.start.offset!, n.position.end.offset!]);
+    const next = blocked || NO_REFS_INSIDE.has(n.type);
+    n.children?.forEach((c) => walk(c, next));
   };
-  lines.forEach((line, i) => {
-    if (mask[i] || !line.trim()) {
-      flush();
-      out.push(line);
-      return;
-    }
-    if (BLOCK_START_RE.test(line)) flush();
-    chunk.push(line);
-  });
-  flush();
-  return out.join("\n");
+  walk(parseMarkdown(text), false);
+  runs.sort((x, y) => x[0] - y[0]);
+  let out = "",
+    last = 0;
+  for (const [start, end] of runs) {
+    if (start < last) continue;
+    out += text.slice(last, start) + fn(text.slice(start, end));
+    last = end;
+  }
+  return out + text.slice(last);
 }
 
 /** True when the char at `idx` is backslash-escaped (odd run of backslashes). */
