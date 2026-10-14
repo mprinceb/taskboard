@@ -73,25 +73,49 @@ export function codeLineMask(lines: string[]): boolean[] {
   });
 }
 
-/** Apply `fn` to the parts of `text` outside code blocks and inline code spans. */
+// A new block starts here, so an inline code span cannot continue across it.
+const BLOCK_START_RE =
+  /^\s{0,3}(?:[-*+]|\d{1,9}[.)])\s|^\s{0,3}#{1,6}(?:\s|$)|^\s{0,3}>/;
+
+function mapInline(chunk: string, fn: (plain: string) => string): string {
+  let out = "",
+    last = 0;
+  for (const code of chunk.matchAll(INLINE_CODE_RE)) {
+    out += fn(chunk.slice(last, code.index)) + code[0];
+    last = code.index! + code[0].length;
+  }
+  return out + fn(chunk.slice(last));
+}
+
+/**
+ * Apply `fn` to the parts of `text` outside code blocks and inline code spans.
+ * Inline spans may cross line breaks within a paragraph (CommonMark), so
+ * consecutive plain lines are matched together; blank lines, code lines and
+ * new block starts end a paragraph.
+ */
 export function mapOutsideCode(
   text: string,
   fn: (plain: string) => string,
 ): string {
   const lines = text.split("\n");
   const mask = codeLineMask(lines);
-  return lines
-    .map((line, i) => {
-      if (mask[i]) return line;
-      let out = "",
-        last = 0;
-      for (const code of line.matchAll(INLINE_CODE_RE)) {
-        out += fn(line.slice(last, code.index)) + code[0];
-        last = code.index! + code[0].length;
-      }
-      return out + fn(line.slice(last));
-    })
-    .join("\n");
+  const out: string[] = [];
+  let chunk: string[] = [];
+  const flush = () => {
+    if (chunk.length) out.push(mapInline(chunk.join("\n"), fn));
+    chunk = [];
+  };
+  lines.forEach((line, i) => {
+    if (mask[i] || !line.trim()) {
+      flush();
+      out.push(line);
+      return;
+    }
+    if (BLOCK_START_RE.test(line)) flush();
+    chunk.push(line);
+  });
+  flush();
+  return out.join("\n");
 }
 
 /** Distinct referenced card ids in order of first appearance, ignoring code. */

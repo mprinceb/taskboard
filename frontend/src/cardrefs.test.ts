@@ -89,3 +89,11 @@ test("indented code is ignored but list continuation is not", () => {
   assert.deepEqual(extractIds(text), ["bbb222", "ccc333"]);
   assert.deepEqual(extractIds("    #[ddd444]"), []);
 });
+
+test("multiline code spans are ignored but do not cross blocks", () => {
+  assert.deepEqual(extractIds("`example\n#[aaa111]\ntext` and #[bbb222]"), [
+    "bbb222",
+  ]);
+  assert.deepEqual(extractIds("- a `x\n- b y` #[ccc333]"), ["ccc333"]);
+  assert.deepEqual(extractIds("`x\n\n#[ddd444]\n\ny`"), ["ddd444"]);
+});

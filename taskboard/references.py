@@ -59,12 +59,33 @@ def _code_mask(lines):
     return mask
 
 
+# A new block starts here, so an inline code span cannot continue across it.
+BLOCK_START_RE = re.compile(
+    r"^\s{0,3}(?:[-*+]|\d{1,9}[.)])\s|^\s{0,3}#{1,6}(?:\s|$)|^\s{0,3}>"
+)
+
+
 def _outside_code(text):
-    """Yield each non-code line of `text` with inline code spans removed."""
+    """Yield paragraphs of `text` with code blocks and inline code removed.
+
+    Inline spans may cross line breaks inside a paragraph (CommonMark), so
+    consecutive plain lines are matched together; blank lines, code lines and
+    new block starts end a paragraph. Mirrors `mapOutsideCode` in the frontend.
+    """
     lines = (text or "").split("\n")
+    chunk = []
     for line, code in zip(lines, _code_mask(lines)):
-        if not code:
-            yield INLINE_CODE_RE.sub(" ", line)
+        if code or not line.strip():
+            if chunk:
+                yield INLINE_CODE_RE.sub(" ", "\n".join(chunk))
+                chunk = []
+            continue
+        if BLOCK_START_RE.match(line) and chunk:
+            yield INLINE_CODE_RE.sub(" ", "\n".join(chunk))
+            chunk = []
+        chunk.append(line)
+    if chunk:
+        yield INLINE_CODE_RE.sub(" ", "\n".join(chunk))
 
 
 def parse_references(text):

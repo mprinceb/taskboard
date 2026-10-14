@@ -603,3 +603,12 @@ class TestTaskboard(unittest.TestCase):
         self.assertEqual(len(self.links(from_card=a.name)), 1)
         self.assertEqual(len(self.links(from_card=b.name)), 0)
 
+    def test_multiline_code_span_is_ignored(self):
+        from taskboard.references import parse_references
+
+        text = "`example\n#[aaa111]\ntext` and #[bbb222]"
+        self.assertEqual(parse_references(text), ["bbb222"])
+        # A span cannot cross a list item or a blank line.
+        self.assertEqual(parse_references("- a `x\n- b y` #[ccc333]"), ["ccc333"])
+        self.assertEqual(parse_references("`x\n\n#[ddd444]\n\ny`"), ["ddd444"])
+
