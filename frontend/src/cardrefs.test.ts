@@ -97,3 +97,10 @@ test("multiline code spans are ignored but do not cross blocks", () => {
   assert.deepEqual(extractIds("- a `x\n- b y` #[ccc333]"), ["ccc333"]);
   assert.deepEqual(extractIds("`x\n\n#[ddd444]\n\ny`"), ["ddd444"]);
 });
+
+test("escaped tokens are literal; list context survives blank lines", () => {
+  assert.deepEqual(extractIds("\\#[aaa111] #[bbb222]"), ["bbb222"]);
+  assert.deepEqual(extractIds("\\\\#[ccc333]"), ["ccc333"]);
+  assert.equal(linkifyRefs("\\#[aaa111]"), "\\#[aaa111]");
+  assert.deepEqual(extractIds("- item\n\n\n    #[ddd444]"), ["ddd444"]);
+});

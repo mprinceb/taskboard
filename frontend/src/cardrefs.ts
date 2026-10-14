@@ -118,11 +118,20 @@ export function mapOutsideCode(
   return out.join("\n");
 }
 
-/** Distinct referenced card ids in order of first appearance, ignoring code. */
+/** True when the char at `idx` is backslash-escaped (odd run of backslashes). */
+function isEscaped(text: string, idx: number): boolean {
+  let n = 0;
+  while (idx - 1 - n >= 0 && text[idx - 1 - n] === "\\") n++;
+  return n % 2 === 1;
+}
+
+/** Distinct referenced card ids in order of first appearance, ignoring code
+ * and backslash-escaped tokens (`\#[id]` is literal text). */
 export function extractIds(text: string): string[] {
   const seen = new Set<string>();
   mapOutsideCode(text || "", (plain) => {
-    for (const m of plain.matchAll(REF_RE())) seen.add(m[1]);
+    for (const m of plain.matchAll(REF_RE()))
+      if (!isEscaped(plain, m.index!)) seen.add(m[1]);
     return plain;
   });
   return [...seen];
@@ -133,7 +142,11 @@ export const CARDREF_PROTOCOL = "cardref:";
 /** Rewrite `#[id]` outside code into `[#id](cardref:id)` links for the renderer. */
 export function linkifyRefs(text: string): string {
   return mapOutsideCode(text, (plain) =>
-    plain.replace(REF_RE(), (_, id) => `[#${id}](${CARDREF_PROTOCOL}${id})`),
+    plain.replace(REF_RE(), (match, id, offset) =>
+      isEscaped(plain, offset)
+        ? match
+        : `[#${id}](${CARDREF_PROTOCOL}${id})`,
+    ),
   );
 }
 

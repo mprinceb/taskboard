@@ -1787,22 +1787,43 @@ function CardModal({
       return r ? [{ ...r, exists: false }] : [];
     });
   };
-  // Backlinks come from the detail payload; reconcile with the live board so a
-  // renamed, moved or archived source updates and a deleted one disappears.
+  // Backlinks are derived from the live board's per-card references so adds,
+  // removals, renames, moves and deletions show while the modal is open. If the
+  // board payload carries no references (older server), fall back to the detail
+  // payload reconciled with the board.
   const liveBacklinks: Backlink[] = (() => {
-    const items = (data?.backlinks || []).flatMap((b: Backlink): Backlink[] => {
-      const c = board.cards.find((x) => x.name === b.name);
-      if (!c) return [];
-      const l = board.lists.find((x) => x.name === c.list_id);
-      return [
-        {
-          ...b,
+    const listTitle = (id: string) =>
+      board.lists.find((x) => x.name === id)?.title || "";
+    let items: Backlink[];
+    if (board.cards.some((c) => Array.isArray(c.references))) {
+      items = board.cards
+        .filter(
+          (c) =>
+            c.name !== name && c.references?.some((r) => r.name === name),
+        )
+        .map((c) => ({
+          name: c.name,
           title: c.title,
-          list_title: l?.title || b.list_title,
+          list_title: listTitle(c.list_id),
+          source: extractIds(c.description || "").includes(name)
+            ? ("description" as const)
+            : ("comment" as const),
           archived: !!c.archived,
-        },
-      ];
-    });
+        }));
+    } else {
+      items = (data?.backlinks || []).flatMap((b: Backlink): Backlink[] => {
+        const c = board.cards.find((x) => x.name === b.name);
+        if (!c) return [];
+        return [
+          {
+            ...b,
+            title: c.title,
+            list_title: listTitle(c.list_id) || b.list_title,
+            archived: !!c.archived,
+          },
+        ];
+      });
+    }
     const active = items.filter((i) => !i.archived);
     return active.length ? active : items;
   })();

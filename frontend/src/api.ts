@@ -26,6 +26,8 @@ export type Card = {
   assignees: string[];
   comment_count: number;
   attachment_count: number;
+  /** Cards referenced from this card's description and comments. */
+  references?: import("./cardrefs").CardRef[];
 };
 export type Notice = {
   name: string;

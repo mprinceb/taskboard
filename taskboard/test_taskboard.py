@@ -624,3 +624,13 @@ class TestTaskboard(unittest.TestCase):
         api.save_comment(src.name, "no reference", name=name)
         self.assertEqual(len(self.links(from_card=src.name)), 0)
 
+    def test_escaped_token_and_list_after_blank_lines(self):
+        from taskboard.references import parse_references
+
+        self.assertEqual(parse_references("\\#[aaa111] #[bbb222]"), ["bbb222"])
+        # An even run of backslashes is an escaped backslash, so the token is real.
+        self.assertEqual(parse_references("\\\\#[ccc333]"), ["ccc333"])
+        # Verified against the renderer's parser: blank lines do not end a list,
+        # so this stays list-item content and is a real reference.
+        self.assertEqual(parse_references("- item\n\n\n    #[ddd444]"), ["ddd444"])
+

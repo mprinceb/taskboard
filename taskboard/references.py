@@ -92,7 +92,11 @@ def parse_references(text):
     """Distinct referenced ids outside Markdown code, in first-appearance order."""
     found = []
     for plain in _outside_code(text):
-        found.extend(REFERENCE_RE.findall(plain))
+        for m in REFERENCE_RE.finditer(plain):
+            # `\#[id]` is Markdown-escaped literal text, not a reference.
+            slashes = len(plain[: m.start()]) - len(plain[: m.start()].rstrip("\\"))
+            if slashes % 2 == 0:
+                found.append(m.group(1))
     return list(dict.fromkeys(found))[:MAX_REFERENCES]
 
 
