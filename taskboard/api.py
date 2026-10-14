@@ -125,14 +125,17 @@ def board():
     )
     card_map = {c.name: c for c in cards}
     list_map = {r.name: r for r in lists}
-    # One indexed query for comment references (the link table is kept in sync on
-    # save and keeps rows for deleted targets); description tokens are parsed in
-    # memory. No comment bodies are rescanned on the 15s board poll.
-    comment_refs = {}
-    for row in frappe.db.sql(
-        "SELECT from_card,to_card FROM `tabTB Card Link` WHERE source='comment' ORDER BY creation,name"
+    # One indexed query for every link row (kept in sync on save): comment
+    # references come from here, and each card's own rows are the only evidence
+    # that a missing target was deleted rather than mistyped. No comment bodies
+    # are rescanned on the 15s board poll.
+    comment_refs, link_targets = {}, {}
+    for source_card, target, source in frappe.db.sql(
+        "SELECT from_card,to_card,source FROM `tabTB Card Link` ORDER BY creation,name"
     ):
-        comment_refs.setdefault(row[0], []).append(row[1])
+        link_targets.setdefault(source_card, set()).add(target)
+        if source == "comment":
+            comment_refs.setdefault(source_card, []).append(target)
     for card in cards:
         card["references"] = reference_payload(
             [
@@ -142,6 +145,8 @@ def board():
             ],
             card_map,
             list_map,
+            retained=link_targets.get(card.name, set()),
+            authorized=True,
         )
         card["assignees"] = assignment_map.get(card.name, [])
         card["comment_count"] = comments.get(card.name, 0)
@@ -202,7 +207,7 @@ def detail(name):
         assignees=assignees(name),
         comments=comments,
         attachments=files,
-        references=reference_payload(refs),
+        references=reference_payload(refs, source=name),
         backlinks=backlinks(name),
     )
 
@@ -271,20 +276,21 @@ def save_card(data):
             frappe.db.set_value(
                 "TB Card", name, "position", index * 1024, update_modified=False
             )
+    mention_notified = set()
     for user in new_mentions:
-        if user != frappe.session.user:
-            card_notice(
-                user,
-                "Mention",
-                doc,
-                f"description:{doc.name}:{doc.modified}:{user}",
-                f"You were mentioned in the description of {doc.title}.",
-            )
+        if user != frappe.session.user and card_notice(
+            user,
+            "Mention",
+            doc,
+            f"description:{doc.name}:{doc.modified}:{user}",
+            f"You were mentioned in the description of {doc.title}.",
+        ):
+            mention_notified.add(user)
     notify_references(
         doc,
         doc.flags.get("taskboard_new_references") or [],
         f"description:{doc.name}:{doc.modified}",
-        new_mentions,
+        mention_notified,
     )
     if "assignees" in data:
         desired = set(data["assignees"])
@@ -368,21 +374,62 @@ def move_card(name, list_id, before=None, modified=None):
     return _move(doc, list_id, names.index(name) * 1024)
 
 
-def notify_references(doc, added, key, mentioned=()):
-    """Notify assignees of newly referenced cards, skipping the actor and @mentioned users."""
-    skip = set(mentioned) | {frappe.session.user}
+# One save never fans out to more than this many referenced cards, so a single
+# valid edit cannot hold the board lock for thousands of notice inserts.
+MAX_NOTIFIED_TARGETS = 20
+
+
+def notify_references(doc, added, key, notified=()):
+    """Notify assignees of newly referenced cards, skipping the actor and users
+    who already got a mention notice from this same save."""
+    skip = set(notified) | {frappe.session.user}
+    targets = list(dict.fromkeys(added))[:MAX_NOTIFIED_TARGETS]
+    if not targets:
+        return
+    # Three batched queries instead of per-target/per-user lookups.
+    titles = {
+        c.name: c.title
+        for c in frappe.get_all(
+            "TB Card", filters={"name": ["in", targets]}, fields=["name", "title"]
+        )
+    }
+    by_target = {}
+    for row in frappe.get_all(
+        "ToDo",
+        filters={
+            "reference_type": "TB Card",
+            "reference_name": ["in", targets],
+            "status": ["!=", "Cancelled"],
+        },
+        fields=["reference_name", "allocated_to"],
+    ):
+        by_target.setdefault(row.reference_name, []).append(row.allocated_to)
+    candidates = list({u for users in by_target.values() for u in users} - skip)
+    if not candidates:
+        return
+    enabled = set(
+        frappe.get_all(
+            "User", filters={"name": ["in", candidates], "enabled": 1}, pluck="name"
+        )
+    )
+    members = set(
+        frappe.get_all(
+            "TB Member",
+            filters={"user": ["in", candidates], "active": 1},
+            pluck="user",
+        )
+    )
+    valid = enabled & members
     # `added` already means "newly added by this save", so make each addition its
     # own event: a reference removed and later re-added must notify again.
     stamp = frappe.utils.now_datetime().isoformat()
-    for target in added:
-        card = frappe.db.get_value(
-            "TB Card", target, ["name", "title"], as_dict=True
-        )
-        if not card:
+    actor = frappe.utils.get_fullname(frappe.session.user)
+    for target in targets:
+        if target not in titles:
             continue
-        message = f"{frappe.utils.get_fullname(frappe.session.user)} referenced {card.title} in {doc.title}"
-        for user in dict.fromkeys(assignees(target)):
-            if user in skip or not membership(user):
+        message = f"{actor} referenced {titles[target]} in {doc.title}"
+        for user in dict.fromkeys(by_target.get(target, [])):
+            if user in skip or user not in valid:
                 continue
             # Mirrors card_notice but keeps the plain `card_reference` kind in the subject.
             notice(
@@ -478,7 +525,6 @@ def save_comment(card, content, name=None):
     content = (content or "").strip()
     if not content or len(content) > 20000:
         frappe.throw("Comment must be 1–20,000 characters.")
-    previous_mentions = set()
     if name:
         comment = frappe.get_doc("Comment", name)
         if (
@@ -487,7 +533,6 @@ def save_comment(card, content, name=None):
             or comment.owner != frappe.session.user
         ):
             frappe.throw("You can only edit your own comments.", frappe.PermissionError)
-        previous_mentions = set(re.findall(r"@\[([^\]]+)\]", comment.content or ""))
         comment.content = escape(content)
         comment.save(ignore_permissions=True)
     else:
@@ -503,22 +548,23 @@ def save_comment(card, content, name=None):
     added = sync_links(card, content, "comment", comment.name)
     # Explicit mention tokens avoid duplicate native mention emails and preserve app links.
     mentioned = set(re.findall(r"@\[([^\]]+)\]", content))
+    mention_notified = set()
     for user in mentioned:
         if not membership(user):
             frappe.throw("Mentioned users must be active board members.")
-        if user != frappe.session.user:
-            card_notice(
-                user,
-                "Mention",
-                doc,
-                f"mention:{comment.name}:{user}",
-                f"You were mentioned in a comment on {doc.title}.",
-            )
-    # A mention that already existed before this edit sends no new notice, so it
-    # must not suppress the reference notice either.
-    notify_references(
-        doc, added, f"comment:{comment.name}", mentioned - previous_mentions
-    )
+        # card_notice returns nothing when the (stable) mention key was already
+        # used, e.g. a mention that existed before this edit or was removed and
+        # re-added: that user got no notice now, so a reference notice is not
+        # suppressed for them.
+        if user != frappe.session.user and card_notice(
+            user,
+            "Mention",
+            doc,
+            f"mention:{comment.name}:{user}",
+            f"You were mentioned in a comment on {doc.title}.",
+        ):
+            mention_notified.add(user)
+    notify_references(doc, added, f"comment:{comment.name}", mention_notified)
     publish_change(card)
     return comment.name
 

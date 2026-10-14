@@ -676,3 +676,70 @@ class TestTaskboard(unittest.TestCase):
             with self.subTest(case["name"]):
                 self.assertEqual(parse_references(case["text"]), case["ids"])
 
+    def test_patch_decodes_escaped_comments(self):
+        from html import escape as html_escape
+
+        from taskboard.patches.backfill_card_links import execute
+
+        src, target = self.card(title="Source"), self.card(title="Target")
+        comment = frappe.get_doc(
+            dict(
+                doctype="Comment",
+                comment_type="Comment",
+                reference_doctype="TB Card",
+                reference_name=src.name,
+                # A quoted fence as the app stores it (html-escaped).
+                content=html_escape(f"> ```\n> #[{target.name}]\n> ```"),
+            )
+        ).insert(ignore_permissions=True)
+        execute()
+        self.assertEqual(len(self.links(from_card=src.name)), 0)
+        self.assertTrue(comment.name)
+
+    def test_deleted_evidence_is_scoped_to_the_referencing_card(self):
+        a, b, c = self.card(title="A"), self.card(title="B"), self.card(title="C")
+        api.save_card({"name": a.name, "description": f"see #[{b.name}]"})
+        frappe.delete_doc("TB Card", b.name, force=True, ignore_permissions=True)
+        # A saw it before deletion, so it keeps the "unavailable" entry.
+        self.assertEqual(
+            [(r["name"], r["exists"]) for r in api.detail(a.name)["references"]],
+            [(b.name, False)],
+        )
+        # C names the deleted id only after deletion: no evidence, no reference.
+        api.save_card({"name": c.name, "description": f"late #[{b.name}]"})
+        self.assertEqual(api.detail(c.name)["references"], [])
+        board = {x["name"]: x for x in api.board()["cards"]}
+        self.assertEqual(len(board[a.name]["references"]), 1)
+        self.assertEqual(board[c.name]["references"], [])
+
+    def test_readded_mention_with_reference_still_notifies_reference(self):
+        src = self.card(title="Source")
+        target = self.card(title="Target", assignees=[self.member])
+        kind = {"kind": "card_reference", "card": src.name, "recipient": self.member}
+        name = api.save_comment(src.name, f"hi @[{self.member}]")
+        api.save_comment(src.name, "removed", name=name)
+        # The mention key was used on the first save, so no new mention notice is
+        # created now; the reference notice must therefore still go out.
+        api.save_comment(
+            src.name, f"hi @[{self.member}] #[{target.name}]", name=name
+        )
+        self.assertEqual(frappe.db.count("TB Notice", kind), 1)
+
+    def test_notification_fanout_is_capped(self):
+        from taskboard.api import MAX_NOTIFIED_TARGETS
+
+        src = self.card(title="Source")
+        targets = [
+            self.card(title=f"T{i}", assignees=[self.member])
+            for i in range(MAX_NOTIFIED_TARGETS + 5)
+        ]
+        text = " ".join(f"#[{t.name}]" for t in targets)
+        api.save_card({"name": src.name, "description": text})
+        count = frappe.db.count(
+            "TB Notice",
+            {"kind": "card_reference", "card": src.name, "recipient": self.member},
+        )
+        self.assertEqual(count, MAX_NOTIFIED_TARGETS)
+        # Links are still recorded for every real target.
+        self.assertEqual(len(self.links(from_card=src.name)), len(targets))
+

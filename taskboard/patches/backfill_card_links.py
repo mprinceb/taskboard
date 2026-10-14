@@ -1,4 +1,7 @@
+from html import unescape
+
 import frappe
+from frappe.utils import strip_html
 
 from taskboard.references import sync_links
 
@@ -13,6 +16,11 @@ def execute():
         fields=["name", "reference_name", "content"],
     ):
         if frappe.db.exists("TB Card", comment.reference_name):
+            # Comments are stored html-escaped; decode exactly as detail() does so
+            # Markdown structure (quotes, fences) is parsed as the user wrote it.
             sync_links(
-                comment.reference_name, comment.content, "comment", comment.name
+                comment.reference_name,
+                unescape(strip_html(comment.content or "")),
+                "comment",
+                comment.name,
             )

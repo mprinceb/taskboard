@@ -18,6 +18,13 @@ _MD = MarkdownIt("commonmark", {"html": False}).enable(["table", "strikethrough"
 _MD.disable("text_join")
 
 
+# GFM autolink literals (bare http(s):// and www. URLs) are links in the
+# renderer, whose link text is not a place for references. markdown-it's
+# commonmark preset does not linkify them, so drop them from prose runs here
+# rather than adding a linkify dependency.
+URL_RE = re.compile(r"(?:https?://|www\.)[^\s<]*", re.I)
+
+
 def _prose_runs(text):
     """Yield the text of prose runs in `text`: not code blocks, inline code,
     escaped characters or link text."""
@@ -31,7 +38,7 @@ def _prose_runs(text):
             elif child.type == "link_close":
                 in_link -= 1
             elif child.type == "text" and not in_link:
-                yield child.content
+                yield URL_RE.sub(" ", child.content)
 
 
 def parse_references(text):
@@ -103,16 +110,23 @@ def _redacted(name):
     }
 
 
-def reference_payload(names, cards=None, lists=None):
+def reference_payload(
+    names, cards=None, lists=None, source=None, retained=None, authorized=False
+):
     """Build reference objects for `names`, preserving order.
 
     `cards` / `lists` are optional prefetched {name: row} maps (board payload);
-    otherwise one batched query per doctype is made.
+    otherwise one batched query per doctype is made. `source` is the referencing
+    card: a token naming a missing card is shown as "unavailable" only if that
+    card still holds a link row for it (the target was deleted); otherwise it
+    never named a card (a typo) and is dropped. `retained` may carry those
+    target ids prefetched for the whole board; `authorized` skips the per-call
+    membership check when the caller already required membership.
     """
     names = list(dict.fromkeys(names))
     if not names:
         return []
-    if not membership():
+    if not authorized and not membership():
         return [_redacted(n) for n in names]
     if cards is None:
         cards = {
@@ -137,11 +151,18 @@ def reference_payload(names, cards=None, lists=None):
     # tokens whose card exists or that still have a retained link row (deleted).
     missing = [n for n in names if n not in cards]
     if missing:
-        retained = set(
-            frappe.get_all(
-                "TB Card Link", filters={"to_card": ["in", missing]}, pluck="to_card"
+        if retained is None:
+            retained = (
+                set(
+                    frappe.get_all(
+                        "TB Card Link",
+                        filters={"from_card": source, "to_card": ["in", missing]},
+                        pluck="to_card",
+                    )
+                )
+                if source
+                else set()
             )
-        )
         names = [n for n in names if n in cards or n in retained]
     out = []
     for name in names:

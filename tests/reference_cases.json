@@ -112,5 +112,19 @@
       "abcdef",
       "ghijkl"
     ]
+  },
+  {
+    "name": "bare http url is a link",
+    "text": "https://example.test/#[abcdef] #[ghijkl]",
+    "ids": [
+      "ghijkl"
+    ]
+  },
+  {
+    "name": "bare www url is a link",
+    "text": "see www.example.test/#[abcdef] and #[ghijkl]",
+    "ids": [
+      "ghijkl"
+    ]
   }
 ]
