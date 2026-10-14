@@ -4,7 +4,6 @@ const REF_RE = () => new RegExp(REF_SOURCE, "g");
 const CHECK_RE = new RegExp(
   "^(\\s*[-*+]\\s+)\\[([ xX])\\](\\s+)" + REF_SOURCE + "\\s*$",
 );
-const FENCE_RE = /^\s{0,3}(`{3,}|~{3,})/;
 const INLINE_CODE_RE = /(`+)(?!`)[\s\S]*?[^`]\1(?!`)/g;
 
 export type CardRef = {
@@ -28,32 +27,70 @@ export type Backlink = {
 const LIST_RE = /^\s{0,3}(?:[-*+]|\d{1,9}[.)])\s/;
 const INDENT_RE = /^(?: {4,}|\t)/;
 
+const QUOTE_RE = /^\s{0,3}(?:>\s?)+/;
+const LIST_PREFIX_RE = /^\s*(?:[-*+]|\d{1,9}[.)])\s+/;
+type Fence = { marker: string; rest: string; quoted: boolean; nested: boolean };
+
+/**
+ * Match a code fence on `line`, including fences nested in a blockquote or a
+ * list item (`> ```` / `- ````), where indentation is not limited to 3.
+ */
+function fenceOf(line: string, inList: boolean): Fence | null {
+  const q = QUOTE_RE.exec(line);
+  const body = q ? line.slice(q[0].length) : line;
+  const loose = !!q || inList;
+  let m = (
+    loose ? /^\s*(`{3,}|~{3,})(.*)$/ : /^\s{0,3}(`{3,}|~{3,})(.*)$/
+  ).exec(body);
+  let nested = loose;
+  if (!m) {
+    const lm = LIST_PREFIX_RE.exec(body);
+    if (lm) {
+      m = /^(`{3,}|~{3,})(.*)$/.exec(body.slice(lm[0].length));
+      nested = true;
+    }
+  }
+  return m ? { marker: m[1], rest: m[2], quoted: !!q, nested } : null;
+}
+
 /**
  * Which lines are Markdown code (fenced blocks including their fences, and
  * indented code blocks). An indented line is code only after a blank line or
- * another code line and outside a list, where it is list continuation.
+ * another code line and outside a list, where it is list continuation. A fence
+ * opened inside a blockquote ends where the quote does.
  */
 export function codeLineMask(lines: string[]): boolean[] {
   let fence = "",
+    fenceQuoted = false,
+    fenceNested = false,
     prevBlank = true,
     inIndented = false,
     inList = false;
   return lines.map((line) => {
-    const m = FENCE_RE.exec(line);
+    if (fence && fenceQuoted && !QUOTE_RE.test(line)) {
+      fence = "";
+      fenceQuoted = false;
+      prevBlank = true;
+    }
     if (fence) {
+      const c = fenceOf(line, fenceNested);
       if (
-        m &&
-        m[1][0] === fence[0] &&
-        m[1].length >= fence.length &&
-        !line.slice(m[0].length).trim()
+        c &&
+        c.marker[0] === fence[0] &&
+        c.marker.length >= fence.length &&
+        !c.rest.trim()
       ) {
         fence = "";
+        fenceQuoted = false;
         prevBlank = true;
       }
       return true;
     }
-    if (m) {
-      fence = m[1];
+    const o = fenceOf(line, inList);
+    if (o && !(o.marker[0] === "`" && o.rest.includes("`"))) {
+      fence = o.marker;
+      fenceQuoted = o.quoted;
+      fenceNested = o.nested;
       inIndented = false;
       prevBlank = false;
       return true;
@@ -180,11 +217,13 @@ export function syncChecklist(text: string, isDone: Done): string {
 export function checklistProgress(
   text: string,
   isDone: Done,
+  known?: (id: string) => boolean,
 ): { done: number; total: number } {
   let done = 0,
     total = 0;
   eachChecklist(text, (line, item) => {
-    if (item) {
+    // Tokens that never named a card (typos) are not part of the progress.
+    if (item && (!known || known(item.id))) {
       total++;
       if (isDone(item.id)) done++;
     }

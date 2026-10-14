@@ -135,7 +135,9 @@ function CardChip({
   open?: (id: string) => void;
 }) {
   const r = refs.get(id);
-  if (!r || !r.exists)
+  // Never named a card (a typo): show the literal text, not a broken chip.
+  if (!r) return <span>{`#[${id}]`}</span>;
+  if (!r.exists)
     return (
       <span
         className="cardref unavailable"
@@ -183,7 +185,9 @@ function Md({
 }) {
   const byId = new Map(refs.map((r) => [r.name, r]));
   const done = doneFromRefs(refs);
-  const stats = progress ? checklistProgress(text, done) : null;
+  const stats = progress
+    ? checklistProgress(text, done, (id) => byId.has(id))
+    : null;
   const source = linkifyRefs(syncChecklist(text, done)).replace(
     /@\[([^\]]+)\]/g,
     "@$1",
@@ -497,6 +501,7 @@ function App() {
         assignees: result.assignees,
         comment_count: result.comments.length,
         attachment_count: result.attachments.length,
+        references: result.references,
       };
       setBoard((b) =>
         b
@@ -1274,11 +1279,18 @@ function CardFace({
     board.lists.filter((l) => l.is_done).map((l) => l.name),
   );
   const cardsById = new Map(board.cards.map((x) => [x.name, x]));
+  const known = c.references
+    ? new Set(c.references.map((r) => r.name))
+    : null;
   const check = c.description
-    ? checklistProgress(c.description, (id) => {
-        const t = cardsById.get(id);
-        return !!t && (doneLists.has(t.list_id) || !!t.completed);
-      })
+    ? checklistProgress(
+        c.description,
+        (id) => {
+          const t = cardsById.get(id);
+          return !!t && (doneLists.has(t.list_id) || !!t.completed);
+        },
+        known ? (id) => known.has(id) : undefined,
+      )
     : { done: 0, total: 0 };
   return (
     <>
@@ -1795,7 +1807,7 @@ function CardModal({
     const listTitle = (id: string) =>
       board.lists.find((x) => x.name === id)?.title || "";
     let items: Backlink[];
-    if (board.cards.some((c) => Array.isArray(c.references))) {
+    if (board.cards.every((c) => Array.isArray(c.references))) {
       items = board.cards
         .filter(
           (c) =>

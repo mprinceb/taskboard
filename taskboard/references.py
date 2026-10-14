@@ -11,7 +11,6 @@ REFERENCE_RE = re.compile(r"#\[([^\]\s]{1,140})\]")
 MAX_REFERENCES = 100
 # Mirror of the frontend's code-span rules (frontend/src/cardrefs.ts mapOutsideCode)
 # so a token inside Markdown code is neither rendered nor stored as a link.
-FENCE_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
 INLINE_CODE_RE = re.compile(r"(`+)(?!`)[\s\S]*?[^`]\1(?!`)")
 
 
@@ -19,30 +18,61 @@ LIST_RE = re.compile(r"^\s{0,3}(?:[-*+]|\d{1,9}[.)])\s")
 INDENT_RE = re.compile(r"^(?: {4,}|\t)")
 
 
+QUOTE_RE = re.compile(r"^\s{0,3}(?:>\s?)+")
+LIST_PREFIX_RE = re.compile(r"^\s*(?:[-*+]|\d{1,9}[.)])\s+")
+LOOSE_FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")
+STRICT_FENCE_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})(.*)$")
+BARE_FENCE_RE = re.compile(r"^(`{3,}|~{3,})(.*)$")
+
+
+def _fence_of(line, in_list):
+    """Match a code fence on `line`, including fences nested in a blockquote or
+    list item, where indentation is not limited to 3. Returns
+    (marker, rest, quoted, nested) or None."""
+    q = QUOTE_RE.match(line)
+    body = line[q.end():] if q else line
+    loose = bool(q) or in_list
+    m = (LOOSE_FENCE_RE if loose else STRICT_FENCE_RE).match(body)
+    nested = loose
+    if not m:
+        lm = LIST_PREFIX_RE.match(body)
+        if lm:
+            m = BARE_FENCE_RE.match(body[lm.end():])
+            nested = True
+    if not m:
+        return None
+    return m.group(1), m.group(2), bool(q), nested
+
+
 def _code_mask(lines):
     """True for lines that are Markdown code: fenced blocks (with their fences)
     and indented code blocks. An indented line is code only after a blank line
-    or another code line and outside a list, where it is list continuation.
+    or another code line and outside a list, where it is list continuation. A
+    fence opened inside a blockquote ends where the quote does.
     Mirrors `codeLineMask` in frontend/src/cardrefs.ts."""
-    fence, prev_blank, in_indented, in_list = "", True, False, False
+    fence, fence_quoted, fence_nested = "", False, False
+    prev_blank, in_indented, in_list = True, False, False
     mask = []
     for line in lines:
-        m = FENCE_RE.match(line)
+        if fence and fence_quoted and not QUOTE_RE.match(line):
+            fence, fence_quoted, prev_blank = "", False, True
         if fence:
             # A closing fence is the same character, at least as long, and
             # followed only by whitespace (CommonMark); "~~~ x" does not close.
+            c = _fence_of(line, fence_nested)
             if (
-                m
-                and m.group(1)[0] == fence[0]
-                and len(m.group(1)) >= len(fence)
-                and not line[m.end():].strip()
+                c
+                and c[0][0] == fence[0]
+                and len(c[0]) >= len(fence)
+                and not c[1].strip()
             ):
-                fence = ""
-                prev_blank = True
+                fence, fence_quoted, prev_blank = "", False, True
             mask.append(True)
             continue
-        if m:
-            fence, in_indented, prev_blank = m.group(1), False, False
+        o = _fence_of(line, in_list)
+        if o and not (o[0][0] == "`" and "`" in o[1]):
+            fence, fence_quoted, fence_nested = o[0], o[2], o[3]
+            in_indented, prev_blank = False, False
             mask.append(True)
             continue
         blank = not line.strip()
@@ -191,6 +221,16 @@ def reference_payload(names, cards=None, lists=None):
                 fields=["name", "title", "is_done"],
             )
         }
+    # A token that never named a card (a typo) is not a reference: only keep
+    # tokens whose card exists or that still have a retained link row (deleted).
+    missing = [n for n in names if n not in cards]
+    if missing:
+        retained = set(
+            frappe.get_all(
+                "TB Card Link", filters={"to_card": ["in", missing]}, pluck="to_card"
+            )
+        )
+        names = [n for n in names if n in cards or n in retained]
     out = []
     for name in names:
         card = cards.get(name)

@@ -634,3 +634,29 @@ class TestTaskboard(unittest.TestCase):
         # so this stays list-item content and is a real reference.
         self.assertEqual(parse_references("- item\n\n\n    #[ddd444]"), ["ddd444"])
 
+    def test_fences_nested_in_quotes_and_lists(self):
+        from taskboard.references import parse_references
+
+        self.assertEqual(
+            parse_references("> ```\n> #[aaa111]\n> ```\n#[bbb222]"), ["bbb222"]
+        )
+        self.assertEqual(
+            parse_references("- ```\n  #[ccc333]\n  ```\n#[ddd444]"), ["ddd444"]
+        )
+        # A fence opened in a quote ends where the quote does.
+        self.assertEqual(
+            parse_references("> ```\n> #[eee555]\n\n#[fff666]"), ["fff666"]
+        )
+
+    def test_never_valid_tokens_are_not_references(self):
+        a, b = self.card(title="A"), self.card(title="Gone")
+        api.save_card(
+            {"name": a.name, "description": f"typo #[nope123456] and #[{b.name}]"}
+        )
+        names = [r["name"] for r in api.detail(a.name)["references"]]
+        self.assertEqual(names, [b.name])
+        frappe.delete_doc("TB Card", b.name, force=True, ignore_permissions=True)
+        refs = api.detail(a.name)["references"]
+        # The deleted target keeps its "unavailable" entry; the typo still has none.
+        self.assertEqual([(r["name"], r["exists"]) for r in refs], [(b.name, False)])
+

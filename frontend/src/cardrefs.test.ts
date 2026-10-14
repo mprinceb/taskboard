@@ -104,3 +104,25 @@ test("escaped tokens are literal; list context survives blank lines", () => {
   assert.equal(linkifyRefs("\\#[aaa111]"), "\\#[aaa111]");
   assert.deepEqual(extractIds("- item\n\n\n    #[ddd444]"), ["ddd444"]);
 });
+
+test("fences nested in quotes and lists are code", () => {
+  assert.deepEqual(extractIds("> ```\n> #[aaa111]\n> ```\n#[bbb222]"), [
+    "bbb222",
+  ]);
+  assert.deepEqual(extractIds("- ```\n  #[ccc333]\n  ```\n#[ddd444]"), [
+    "ddd444",
+  ]);
+  assert.deepEqual(extractIds("> ```\n> #[eee555]\n\n#[fff666]"), ["fff666"]);
+});
+
+test("checklist progress ignores tokens that never named a card", () => {
+  const text = "- [ ] #[aaa111]\n- [ ] #[typo999]";
+  assert.deepEqual(
+    checklistProgress(
+      text,
+      () => false,
+      (id) => id === "aaa111",
+    ),
+    { done: 0, total: 1 },
+  );
+});
