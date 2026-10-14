@@ -65,11 +65,15 @@ export type Comment = {
   creation: string;
   modified: string;
 };
+export type { CardRef, Backlink } from "./cardrefs";
+import type { CardRef, Backlink } from "./cardrefs";
 export type Detail = {
   card: Card;
   assignees: string[];
   comments: Comment[];
   attachments: Attachment[];
+  references?: CardRef[];
+  backlinks?: Backlink[];
 };
 export const csrf = () =>
   document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") ||

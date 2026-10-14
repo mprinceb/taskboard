@@ -51,7 +51,7 @@ class TestTaskboard(unittest.TestCase):
 
     def card(self, **values):
         return api.save_card(
-            dict(title="Integration test", list_id=self.column, **values)
+            {"title": "Integration test", "list_id": self.column, **values}
         )["card"]
 
     def test_permissions_and_membership_removal(self):
@@ -372,3 +372,147 @@ class TestTaskboard(unittest.TestCase):
         self.assertIsNone(api.membership(self.member))
         with self.assertRaises(frappe.ValidationError):
             api.save_card({"name": c.name, "assignees": [self.member]})
+
+
+    # Card references: #[card_name] tokens in descriptions and comments.
+
+    def links(self, **filters):
+        return frappe.get_all(
+            "TB Card Link", filters=filters, fields=["from_card", "to_card", "source", "source_name"]
+        )
+
+    def test_parse_references(self):
+        from taskboard.references import parse_references
+
+        self.assertEqual(
+            parse_references("a #[abc] b #[def] #[abc] #[] #[ x ] @[u@x.y]"),
+            ["abc", "def"],
+        )
+        self.assertEqual(parse_references(None), [])
+
+    def test_sync_idempotent_and_ignores_invalid(self):
+        a, b = self.card(), self.card(title="Target")
+        text = f"See #[{b.name}] and #[{b.name}] and #[{a.name}] and #[nope123456]"
+        api.save_card({"name": a.name, "description": text})
+        rows = self.links(from_card=a.name)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual((rows[0].to_card, rows[0].source), (b.name, "description"))
+        api.save_card({"name": a.name, "description": text + " again"})
+        self.assertEqual(len(self.links(from_card=a.name)), 1)
+        api.save_card({"name": a.name, "description": "gone"})
+        self.assertEqual(self.links(from_card=a.name), [])
+
+    def test_comment_links_and_delete_cleanup(self):
+        a, b = self.card(), self.card(title="Target")
+        name = api.save_comment(a.name, f"ref #[{b.name}]")
+        rows = self.links(from_card=a.name, source="comment")
+        self.assertEqual([(r.to_card, r.source_name) for r in rows], [(b.name, name)])
+        api.save_comment(a.name, f"ref #[{b.name}] edited", name=name)
+        self.assertEqual(len(self.links(from_card=a.name)), 1)
+        api.save_comment(a.name, "no ref", name=name)
+        self.assertEqual(self.links(from_card=a.name), [])
+        api.save_comment(a.name, f"again #[{b.name}]", name=name)
+        self.assertEqual(len(self.links(from_card=a.name)), 1)
+        api.delete_comment(name)
+        self.assertEqual(self.links(from_card=a.name), [])
+
+    def test_references_and_backlinks_payload(self):
+        a = self.card()
+        b = self.card(title="Open target")
+        done = self.card(title="Done target")
+        api.move_card(done.name, self.done)
+        gone = self.card(title="Doomed")
+        api.save_card(
+            {
+                "name": a.name,
+                "description": f"#[{done.name}] #[{b.name}] #[{gone.name}]",
+            }
+        )
+        api.save_comment(a.name, f"later #[{b.name}] #[{gone.name}]")
+        keys = {
+            "name", "title", "list_id", "list_title", "is_done",
+            "completed", "archived", "exists",
+        }
+        detail = api.detail(a.name)
+        refs = detail["references"]
+        self.assertEqual([r["name"] for r in refs], [done.name, b.name, gone.name])
+        for r in refs:
+            self.assertEqual(set(r), keys)
+        self.assertTrue(refs[0]["is_done"] and refs[0]["completed"])
+        self.assertEqual(refs[0]["list_title"], "Done " + self.suffix)
+        self.assertFalse(refs[1]["is_done"])
+        self.assertEqual(refs[1]["list_id"], self.column)
+        self.assertTrue(refs[1]["exists"])
+        # Deleted target keeps the token but is redacted.
+        frappe.delete_doc("TB Card", gone.name, force=True, ignore_permissions=True)
+        refs = api.detail(a.name)["references"]
+        self.assertEqual(
+            refs[2],
+            {
+                "name": gone.name, "exists": False, "title": "", "list_id": "",
+                "list_title": "", "is_done": False, "completed": False,
+                "archived": False,
+            },
+        )
+        back = api.detail(b.name)["backlinks"]
+        self.assertEqual(
+            back,
+            [
+                {
+                    "name": a.name,
+                    "title": a.title,
+                    "list_title": "Test " + self.suffix,
+                    "source": "description",
+                    "archived": False,
+                }
+            ],
+        )
+        board_card = [c for c in api.board()["cards"] if c.name == a.name][0]
+        self.assertEqual([r["name"] for r in board_card["references"]][:3], [done.name, b.name, gone.name])
+
+    def test_backlinks_archived_hidden_unless_only(self):
+        a, b = self.card(), self.card(title="Target")
+        api.save_card({"name": a.name, "description": f"#[{b.name}]"})
+        api.save_card({"name": a.name, "archived": 1})
+        self.assertEqual(len(api.detail(b.name)["backlinks"]), 1)
+        c = self.card(description=f"#[{b.name}]")
+        self.assertEqual([x["name"] for x in api.detail(b.name)["backlinks"]], [c.name])
+
+    def test_non_member_gets_redacted(self):
+        from taskboard.references import reference_payload
+
+        a = self.card()
+        frappe.set_user(self.outsider)
+        self.assertFalse(reference_payload([a.name])[0]["exists"])
+        self.assertEqual(reference_payload([a.name])[0]["title"], "")
+
+    def test_reference_notifications_and_dedupe(self):
+        target = self.card(title="Target", assignees=[self.member, self.admin])
+        src = self.card(title="Source")
+        kind = {"kind": "card_reference", "card": src.name}
+        api.save_card(
+            {"name": src.name, "description": f"see #[{target.name}] @[{self.member}]"}
+        )
+        # Actor (admin) excluded; member already notified through @mention.
+        self.assertEqual(frappe.db.count("TB Notice", kind), 0)
+        self.assertEqual(
+            frappe.db.count("TB Notice", {"kind": "Mention", "card": src.name}), 1
+        )
+        other = self.card(title="Other", assignees=[self.member])
+        api.save_card({"name": src.name, "description": f"see #[{other.name}]"})
+        self.assertEqual(
+            frappe.db.get_value(
+                "TB Notice", {**kind, "recipient": self.member}, "subject"
+            ),
+            f"{frappe.utils.get_fullname(self.admin)} referenced Other in Source",
+        )
+        self.assertEqual(frappe.db.count("TB Notice", kind), 1)
+        # Re-saving does not renotify.
+        api.save_card({"name": src.name, "description": f"see #[{other.name}] more"})
+        self.assertEqual(frappe.db.count("TB Notice", kind), 1)
+        # Comment reference notifies once, not on edit.
+        name = api.save_comment(src.name, f"#[{target.name}]")
+        count = frappe.db.count("TB Notice", kind)
+        self.assertEqual(count, 2)
+        api.save_comment(src.name, f"#[{target.name}] edit", name=name)
+        self.assertEqual(frappe.db.count("TB Notice", kind), count)

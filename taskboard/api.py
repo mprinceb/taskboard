@@ -8,6 +8,13 @@ import frappe
 from frappe.utils import cint, now_datetime, add_days, get_datetime, strip_html
 from taskboard.permissions import require_member, membership
 from taskboard.notifications import card_notice, notice, app_url
+from taskboard.references import (
+    backlinks,
+    clear_comment_links,
+    parse_references,
+    reference_payload,
+    sync_links,
+)
 
 
 def parse(value, default=None):
@@ -111,7 +118,29 @@ def board():
             "SELECT card,COUNT(*) FROM `tabTB Attachment` WHERE removed=0 GROUP BY card"
         )
     )
+    lists = frappe.get_all(
+        "TB List",
+        fields=["name", "title", "position", "is_done", "archived"],
+        order_by="position, creation",
+    )
+    card_map = {c.name: c for c in cards}
+    list_map = {r.name: r for r in lists}
+    # One batched query for comment references; description tokens are parsed in memory.
+    comment_refs = {}
+    for row in frappe.db.sql(
+        "SELECT from_card,to_card FROM `tabTB Card Link` WHERE source='comment' ORDER BY creation,name"
+    ):
+        comment_refs.setdefault(row[0], []).append(row[1])
     for card in cards:
+        card["references"] = reference_payload(
+            [
+                r
+                for r in parse_references(card.description) + comment_refs.get(card.name, [])
+                if r != card.name
+            ],
+            card_map,
+            list_map,
+        )
         card["assignees"] = assignment_map.get(card.name, [])
         card["comment_count"] = comments.get(card.name, 0)
         card["attachment_count"] = attachments.get(card.name, 0)
@@ -121,11 +150,7 @@ def board():
             max_upload_mb=settings.max_upload_mb,
             reminder_days=settings.reminder_days,
         ),
-        lists=frappe.get_all(
-            "TB List",
-            fields=["name", "title", "position", "is_done", "archived"],
-            order_by="position, creation",
-        ),
+        lists=lists,
         cards=cards,
         members=members(),
         user=frappe.session.user,
@@ -164,11 +189,19 @@ def detail(name):
 
     for comment in comments:
         comment.content = unescape(strip_html(comment.content))
+    texts = [doc.description or ""] + [c.content for c in comments]
+    refs = [
+        r
+        for r in dict.fromkeys(x for t in texts for x in parse_references(t))
+        if r != name
+    ]
     return dict(
         card=doc.as_dict(),
         assignees=assignees(name),
         comments=comments,
         attachments=files,
+        references=reference_payload(refs),
+        backlinks=backlinks(name),
     )
 
 
@@ -245,6 +278,12 @@ def save_card(data):
                 f"description:{doc.name}:{doc.modified}:{user}",
                 f"You were mentioned in the description of {doc.title}.",
             )
+    notify_references(
+        doc,
+        doc.flags.get("taskboard_new_references") or [],
+        f"description:{doc.name}:{doc.modified}",
+        new_mentions,
+    )
     if "assignees" in data:
         desired = set(data["assignees"])
         if len(desired) > 50:
@@ -325,6 +364,30 @@ def move_card(name, list_id, before=None, modified=None):
                 "TB Card", item, "position", index * 1024, update_modified=False
             )
     return _move(doc, list_id, names.index(name) * 1024)
+
+
+def notify_references(doc, added, key, mentioned=()):
+    """Notify assignees of newly referenced cards, skipping the actor and @mentioned users."""
+    skip = set(mentioned) | {frappe.session.user}
+    for target in added:
+        card = frappe.db.get_value(
+            "TB Card", target, ["name", "title"], as_dict=True
+        )
+        if not card:
+            continue
+        message = f"{frappe.utils.get_fullname(frappe.session.user)} referenced {card.title} in {doc.title}"
+        for user in dict.fromkeys(assignees(target)):
+            if user in skip or not membership(user):
+                continue
+            # Mirrors card_notice but keeps the plain `card_reference` kind in the subject.
+            notice(
+                user,
+                "card_reference",
+                message,
+                f'<p>{escape(message)}</p><p><a href="{escape(app_url("/taskboard?card=" + doc.name))}">{escape(doc.title)}</a></p>',
+                f"reference:{key}:{target}:{user}",
+                card=doc.name,
+            )
 
 
 def _move(doc, list_id, position):
@@ -430,8 +493,10 @@ def save_comment(card, content, name=None):
                 content=escape(content),
             )
         ).insert(ignore_permissions=True)
+    added = sync_links(card, content, "comment", comment.name)
     # Explicit mention tokens avoid duplicate native mention emails and preserve app links.
-    for user in set(re.findall(r"@\[([^\]]+)\]", content)):
+    mentioned = set(re.findall(r"@\[([^\]]+)\]", content))
+    for user in mentioned:
         if not membership(user):
             frappe.throw("Mentioned users must be active board members.")
         if user != frappe.session.user:
@@ -442,6 +507,7 @@ def save_comment(card, content, name=None):
                 f"mention:{comment.name}:{user}",
                 f"You were mentioned in a comment on {doc.title}.",
             )
+    notify_references(doc, added, f"comment:{comment.name}", mentioned)
     publish_change(card)
     return comment.name
 
@@ -455,6 +521,7 @@ def delete_comment(name):
     # Recoverable redaction; attachments stay on the card.
     doc.content = "[Comment deleted]"
     doc.save(ignore_permissions=True)
+    clear_comment_links(doc.reference_name, doc.name)
     publish_change(doc.reference_name)
 
 

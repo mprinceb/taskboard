@@ -26,3 +26,17 @@ class Card(Document):
         from taskboard.api import publish_change
 
         publish_change(self.name)
+        if self.flags.in_insert or self.has_value_changed("description"):
+            from taskboard.references import sync_links
+
+            self.flags.taskboard_new_references = sync_links(
+                self.name, self.description, "description"
+            )
+
+    def on_trash(self):
+        for name in frappe.get_all(
+            "TB Card Link",
+            or_filters={"from_card": self.name, "to_card": self.name},
+            pluck="name",
+        ):
+            frappe.delete_doc("TB Card Link", name, ignore_permissions=True, force=True)

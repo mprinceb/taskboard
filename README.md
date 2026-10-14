@@ -98,6 +98,17 @@ TASKBOARD_SITE=YOUR_SITE ./env/bin/gunicorn \
 
 Use your normal HTTPS reverse proxy for deployment. The dedicated entry point serves compiled Taskboard/Frappe assets; private files pass through Frappe permissions.
 
+## Card references
+
+Type `#[<card_name>]` in a card description or comment (for example `#[gbbhu7th7n]`) to reference another card, in the same way `@[user_email]` mentions a member. The raw token is stored in the text and links are tracked in the `TB Card Link` doctype (`from_card`, `to_card`, `source` = `description|comment`, `source_name` = comment id). Self-references, unknown ids and duplicates are ignored; editing or deleting a comment, or editing the description, re-syncs the links.
+
+`taskboard.api.detail` adds two keys:
+
+- `references`: every distinct card referenced from the description and comments, in first-appearance order: `{name, title, list_id, list_title, is_done, completed, archived, exists}`. `is_done` is true when the card's list is a done list or the card is completed. A deleted target is returned as `{name, exists: false}` with empty/false remaining fields.
+- `backlinks`: cards that reference this one: `{name, title, list_title, source, archived}`, one per referencing card; archived cards are listed only when no active card references this one.
+
+`taskboard.api.board` adds the same `references` list to each card. When a reference is newly added, assignees of the referenced card receive a `card_reference` notice ("<actor> referenced <card> in <card>"), except the acting user and anyone already notified by an `@` mention in the same save. Existing sites get links for existing text through the `backfill_card_links` patch on `bench migrate`.
+
 ## Verification
 
 Run integration tests only on a disposable site with `allow_tests: true` and `mute_emails: 1`:
