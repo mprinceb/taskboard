@@ -1776,7 +1776,7 @@ function CardModal({
           title: c.title,
           list_id: c.list_id,
           list_title: l?.title || "",
-          is_done: !!l?.is_done,
+          is_done: !!l?.is_done || !!c.completed,
           completed: !!c.completed,
           archived: !!c.archived,
           exists: true,

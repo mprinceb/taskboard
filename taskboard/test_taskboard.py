@@ -545,3 +545,26 @@ class TestTaskboard(unittest.TestCase):
             frappe.db.count("TB Notice", {"kind": "Mention", "card": src.name}), 1
         )
 
+    def test_reference_cap_and_batched_validation(self):
+        from taskboard.references import MAX_REFERENCES, parse_references
+
+        tokens = " ".join(f"#[tok{i:05d}]" for i in range(MAX_REFERENCES + 50))
+        self.assertEqual(len(parse_references(tokens)), MAX_REFERENCES)
+        self.assertEqual(parse_references("#[" + "x" * 141 + "]"), [])
+        a, b = self.card(), self.card(title="Real")
+        api.save_card({"name": a.name, "description": tokens + f" #[{b.name}]"})
+        # Real target past the cap is ignored; nonexistent tokens create no rows.
+        self.assertEqual(len(self.links(from_card=a.name)), 0)
+
+    def test_board_keeps_comment_reference_to_deleted_card(self):
+        src, target = self.card(title="Source"), self.card(title="Gone")
+        api.save_comment(src.name, f"see #[{target.name}]")
+        frappe.delete_doc("TB Card", target.name, force=True, ignore_permissions=True)
+        row = next(c for c in api.board()["cards"] if c["name"] == src.name)
+        self.assertEqual(
+            [(r["name"], r["exists"]) for r in row["references"]],
+            [(target.name, False)],
+        )
+        detail = api.detail(src.name)
+        self.assertEqual([r["exists"] for r in detail["references"]], [False])
+

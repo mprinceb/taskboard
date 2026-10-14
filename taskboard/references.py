@@ -5,7 +5,10 @@ import re
 import frappe
 from taskboard.permissions import membership
 
-REFERENCE_RE = re.compile(r"#\[([^\]\s]+)\]")
+REFERENCE_RE = re.compile(r"#\[([^\]\s]{1,140})\]")
+# Bound the work a single description/comment can cause (existence checks,
+# link rows, payload size) while the board lock is held.
+MAX_REFERENCES = 100
 # Mirror of the frontend's code-span rules (frontend/src/cardrefs.ts mapOutsideCode)
 # so a token inside Markdown code is neither rendered nor stored as a link.
 FENCE_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
@@ -32,7 +35,7 @@ def parse_references(text):
     found = []
     for plain in _outside_code(text):
         found.extend(REFERENCE_RE.findall(plain))
-    return list(dict.fromkeys(found))
+    return list(dict.fromkeys(found))[:MAX_REFERENCES]
 
 
 def sync_links(card, text, source, source_name=None):
@@ -40,11 +43,11 @@ def sync_links(card, text, source, source_name=None):
     source_name = source_name or ""
     wanted = [r for r in parse_references(text) if r != card]
     if wanted:
-        wanted = [
-            r
-            for r in wanted
-            if frappe.db.exists("TB Card", r)
-        ]
+        # One query instead of one existence check per token.
+        real = set(
+            frappe.get_all("TB Card", filters={"name": ["in", wanted]}, pluck="name")
+        )
+        wanted = [r for r in wanted if r in real]
     existing = frappe.get_all(
         "TB Card Link",
         filters={"from_card": card, "source": source, "source_name": source_name},
