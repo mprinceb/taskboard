@@ -35,8 +35,11 @@ import {
   RefreshCw,
   Mail,
   CheckCircle2,
+  Hash,
+  ListChecks,
+  Link2,
 } from "lucide-react";
-import Markdown from "react-markdown";
+import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   api,
@@ -49,7 +52,17 @@ import {
   Detail,
   Member,
   Attachment,
+  CardRef,
+  Backlink,
 } from "./api";
+import {
+  CARDREF_PROTOCOL,
+  linkifyRefs,
+  syncChecklist,
+  checklistProgress,
+  doneFromRefs,
+  extractIds,
+} from "./cardrefs";
 import "./style.css";
 import { Tooltips } from "./tooltips";
 import { DatePicker } from "./dates";
@@ -107,23 +120,251 @@ function Avatar({
     </span>
   );
 }
-function Md({ text }: { text: string }) {
+const normalizeDetail = (d: Detail): Detail => ({
+  ...d,
+  references: d.references || [],
+  backlinks: d.backlinks || [],
+});
+function CardChip({
+  id,
+  refs,
+  open,
+}: {
+  id: string;
+  refs: Map<string, CardRef>;
+  open?: (id: string) => void;
+}) {
+  const r = refs.get(id);
+  // Never named a card (a typo): show the literal text, not a broken chip.
+  if (!r) return <span>{`#[${id}]`}</span>;
+  if (!r.exists)
+    return (
+      <span
+        className="cardref unavailable"
+        data-tooltip="This card was deleted or you do not have access to it"
+      >
+        <Link2 size={12} aria-hidden="true" />
+        <span className="cardref-title">Unavailable card</span>
+      </span>
+    );
+  const state = r.is_done ? "Done" : r.list_title;
+  return (
+    <button
+      type="button"
+      className={
+        "cardref " + (r.is_done ? "done " : "") + (r.archived ? "archived" : "")
+      }
+      data-tooltip={`${r.title} · ${r.is_done ? "Done" : r.list_title}${r.archived ? " · Archived" : ""}`}
+      aria-label={`Open card ${r.title}, ${state}${r.archived ? ", archived" : ""}`}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        open?.(id);
+      }}
+    >
+      {r.is_done ? (
+        <Check size={12} aria-hidden="true" />
+      ) : (
+        <span className="cardref-dot" aria-hidden="true" />
+      )}
+      <span className="cardref-title">{r.title}</span>
+      <span className="cardref-state">{state}</span>
+    </button>
+  );
+}
+function Md({
+  text,
+  refs = [],
+  open,
+  progress = false,
+}: {
+  text: string;
+  refs?: CardRef[];
+  open?: (id: string) => void;
+  progress?: boolean;
+}) {
+  const byId = new Map(refs.map((r) => [r.name, r]));
+  const done = doneFromRefs(refs);
+  const stats = progress
+    ? checklistProgress(text, done, (id) => byId.has(id))
+    : null;
+  const source = linkifyRefs(syncChecklist(text, done)).replace(
+    /@\[([^\]]+)\]/g,
+    "@$1",
+  );
   return (
     <div className="markdown">
+      {stats && stats.total > 0 && (
+        <div
+          className="checklist-progress"
+          role="group"
+          aria-label={`${stats.done} of ${stats.total} linked cards done`}
+        >
+          <span>
+            {stats.done}/{stats.total} done
+          </span>
+          <progress max={stats.total} value={stats.done} aria-hidden="true" />
+        </div>
+      )}
       <Markdown
         remarkPlugins={[remarkGfm]}
+        urlTransform={(url) =>
+          url.startsWith(CARDREF_PROTOCOL) ? url : defaultUrlTransform(url)
+        }
         components={{
-          a: ({ children, ...props }) => (
-            <a {...props} target="_blank" rel="noopener noreferrer">
-              {children}
-            </a>
-          ),
+          a: ({ children, href, ...props }) =>
+            href?.startsWith(CARDREF_PROTOCOL) ? (
+              <CardChip
+                id={href.slice(CARDREF_PROTOCOL.length)}
+                refs={byId}
+                open={open}
+              />
+            ) : (
+              <a
+                {...props}
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {children}
+              </a>
+            ),
           img: () => null,
         }}
       >
-        {text.replace(/@\[([^\]]+)\]/g, "@$1")}
+        {source}
       </Markdown>
     </div>
+  );
+}
+function CardPicker({
+  board,
+  exclude,
+  label,
+  compact = false,
+  onPick,
+}: {
+  board: Board;
+  exclude: string;
+  label: string;
+  compact?: boolean;
+  onPick: (id: string) => void;
+}) {
+  const [openPopover, setOpenPopover] = useState(false),
+    [query, setQuery] = useState(""),
+    [active, setActive] = useState(0),
+    [archived, setArchived] = useState(false);
+  const input = useRef<HTMLInputElement>(null),
+    button = useRef<HTMLButtonElement>(null),
+    uid = useRef("cp" + Math.random().toString(36).slice(2, 8)).current;
+  const q = query.trim().toLowerCase();
+  const listTitle = (id: string) =>
+    board.lists.find((l) => l.name === id)?.title || "";
+  const options = board.cards
+    .filter(
+      (c) =>
+        c.name !== exclude &&
+        (archived || !c.archived) &&
+        (!q ||
+          c.title.toLowerCase().includes(q) ||
+          listTitle(c.list_id).toLowerCase().includes(q)),
+    )
+    .slice(0, 50);
+  useEffect(() => {
+    if (openPopover) input.current?.focus();
+  }, [openPopover]);
+  useEffect(() => setActive(0), [query, archived]);
+  const close = () => {
+    setOpenPopover(false);
+    setQuery("");
+    button.current?.focus();
+  };
+  const pick = (id: string) => {
+    onPick(id);
+    close();
+  };
+  return (
+    <span className="card-picker">
+      <button
+        ref={button}
+        type="button"
+        className={
+          compact ? "subtle picker-button compact" : "subtle picker-button"
+        }
+        aria-haspopup="listbox"
+        aria-expanded={openPopover}
+        aria-label={label}
+        data-tooltip={label}
+        onClick={() => setOpenPopover(!openPopover)}
+      >
+        <Hash size={13} aria-hidden="true" /> {compact ? "Card" : "Link a card"}
+      </button>
+      {openPopover && (
+        <div
+          className="picker-popover"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.preventDefault();
+              e.stopPropagation();
+              close();
+            } else if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setActive(Math.min(active + 1, options.length - 1));
+            } else if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setActive(Math.max(active - 1, 0));
+            } else if (e.key === "Enter") {
+              e.preventDefault();
+              if (options[active]) pick(options[active].name);
+            }
+          }}
+        >
+          <input
+            ref={input}
+            role="combobox"
+            aria-label="Search cards by title"
+            aria-expanded="true"
+            aria-controls={uid}
+            aria-activedescendant={
+              options[active] ? `${uid}-${options[active].name}` : undefined
+            }
+            placeholder="Search cards…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <ul id={uid} role="listbox" aria-label="Cards">
+            {options.map((c, i) => (
+              <li
+                key={c.name}
+                id={`${uid}-${c.name}`}
+                role="option"
+                aria-selected={i === active}
+                className={i === active ? "active" : ""}
+                onMouseEnter={() => setActive(i)}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => pick(c.name)}
+              >
+                <span className="picker-title">{c.title}</span>
+                <small>{listTitle(c.list_id)}</small>
+              </li>
+            ))}
+            {options.length === 0 && (
+              <li className="picker-empty" role="presentation">
+                No matching cards
+              </li>
+            )}
+          </ul>
+          <label className="picker-archived">
+            <input
+              type="checkbox"
+              checked={archived}
+              onChange={(e) => setArchived(e.target.checked)}
+            />
+            Include archived
+          </label>
+        </div>
+      )}
+    </span>
   );
 }
 function Modal({
@@ -260,6 +501,7 @@ function App() {
         assignees: result.assignees,
         comment_count: result.comments.length,
         attachment_count: result.attachments.length,
+        references: result.references,
       };
       setBoard((b) =>
         b
@@ -566,7 +808,7 @@ function App() {
           move={(c, t) => changeCard(c, { list_id: t.list }, t.before, true)}
           reorder={reorderLists}
           interaction={setInteraction}
-          face={(c) => <CardFace c={c} members={board.members} />}
+          face={(c) => <CardFace c={c} members={board.members} board={board} />}
           complete={(c) =>
             void changeCard(c, { completed: c.completed ? 0 : 1 })
           }
@@ -650,9 +892,11 @@ function App() {
       )}
       {card && (
         <CardModal
+          key={card}
           name={card}
           board={board}
           close={() => openCard(null)}
+          open={openCard}
           refresh={() => load(true)}
         />
       )}
@@ -1021,7 +1265,33 @@ function Invite({ token }: { token: string }) {
     </div>
   );
 }
-function CardFace({ c, members }: { c: Card; members: Member[] }) {
+function CardFace({
+  c,
+  members,
+  board,
+}: {
+  c: Card;
+  members: Member[];
+  board: Board;
+}) {
+  // Derived from the description already in the board payload: no extra requests.
+  const doneLists = new Set(
+    board.lists.filter((l) => l.is_done).map((l) => l.name),
+  );
+  const cardsById = new Map(board.cards.map((x) => [x.name, x]));
+  const known = c.references
+    ? new Set(c.references.map((r) => r.name))
+    : null;
+  const check = c.description
+    ? checklistProgress(
+        c.description,
+        (id) => {
+          const t = cardsById.get(id);
+          return !!t && (doneLists.has(t.list_id) || !!t.completed);
+        },
+        known ? (id) => known.has(id) : undefined,
+      )
+    : { done: 0, total: 0 };
   return (
     <>
       <div className="card-title">{c.title}</div>
@@ -1058,6 +1328,15 @@ function CardFace({ c, members }: { c: Card; members: Member[] }) {
         {c.description && (
           <span data-tooltip="This card has a description">
             <AlignLeft size={14} aria-label="Has description" />
+          </span>
+        )}
+        {check.total > 0 && (
+          <span
+            data-tooltip={`${check.done} of ${check.total} linked cards done`}
+            aria-label={`${check.done} of ${check.total} linked cards done`}
+          >
+            <ListChecks size={13} />
+            {check.done}/{check.total}
           </span>
         )}
         {c.comment_count > 0 && (
@@ -1381,11 +1660,13 @@ function CardModal({
   name,
   board,
   close,
+  open,
   refresh,
 }: {
   name: string;
   board: Board;
   close: () => void;
+  open: (id: string) => void;
   refresh: () => Promise<void>;
 }) {
   const [data, setData] = useState<Detail | null>(null),
@@ -1401,7 +1682,7 @@ function CardModal({
     [dirty, setDirty] = useState(false);
   const completing = useRef(false);
   const load = async () => {
-    const d = await get<Detail>("detail", { name });
+    const d = normalizeDetail(await get<Detail>("detail", { name }));
     setData(d);
     setDraft(d.card);
     setSelected(d.assignees);
@@ -1484,6 +1765,80 @@ function CardModal({
     // A failed board refresh must not undo an already persisted completion.
     await refresh().catch((e: Error) => setError(e.message));
   };
+  const goto = (id: string) => {
+    if (id === name) return;
+    if (dirty || comment || commentFiles.length) {
+      if (!window.confirm("Discard your unsaved changes?")) return;
+    }
+    open(id);
+  };
+  // Live board state wins for cards still on the board (renames, moves,
+  // completion and archiving show immediately, and freshly inserted unsaved
+  // references resolve). A target missing from the board is deleted or
+  // inaccessible, so show the server entry as unavailable.
+  const refsFor = (text: string): CardRef[] => {
+    const known = new Map((data?.references || []).map((r) => [r.name, r]));
+    return extractIds(text || "").flatMap((id): CardRef[] => {
+      const c = board.cards.find((x) => x.name === id);
+      if (c) {
+        const l = board.lists.find((x) => x.name === c.list_id);
+        return [
+          {
+            name: c.name,
+            title: c.title,
+            list_id: c.list_id,
+            list_title: l?.title || "",
+            is_done: !!l?.is_done || !!c.completed,
+            completed: !!c.completed,
+            archived: !!c.archived,
+            exists: true,
+          },
+        ];
+      }
+      const r = known.get(id);
+      return r ? [{ ...r, exists: false }] : [];
+    });
+  };
+  // Backlinks are derived from the live board's per-card references so adds,
+  // removals, renames, moves and deletions show while the modal is open. If the
+  // board payload carries no references (older server), fall back to the detail
+  // payload reconciled with the board.
+  const liveBacklinks: Backlink[] = (() => {
+    const listTitle = (id: string) =>
+      board.lists.find((x) => x.name === id)?.title || "";
+    let items: Backlink[];
+    if (board.cards.every((c) => Array.isArray(c.references))) {
+      items = board.cards
+        .filter(
+          (c) =>
+            c.name !== name && c.references?.some((r) => r.name === name),
+        )
+        .map((c) => ({
+          name: c.name,
+          title: c.title,
+          list_title: listTitle(c.list_id),
+          source: extractIds(c.description || "").includes(name)
+            ? ("description" as const)
+            : ("comment" as const),
+          archived: !!c.archived,
+        }));
+    } else {
+      items = (data?.backlinks || []).flatMap((b: Backlink): Backlink[] => {
+        const c = board.cards.find((x) => x.name === b.name);
+        if (!c) return [];
+        return [
+          {
+            ...b,
+            title: c.title,
+            list_title: listTitle(c.list_id) || b.list_title,
+            archived: !!c.archived,
+          },
+        ];
+      });
+    }
+    const active = items.filter((i) => !i.archived);
+    return active.length ? active : items;
+  })();
   const safeClose = () => {
     if (dirty || comment || commentFiles.length) {
       if (!window.confirm("Discard your unsaved changes?")) return;
@@ -1662,6 +2017,17 @@ function CardModal({
                         </option>
                       ))}
                     </select>
+                    <CardPicker
+                      board={board}
+                      exclude={name}
+                      label="# Link a card"
+                      onPick={(id) =>
+                        change(
+                          "description",
+                          (draft.description || "") + ` #[${id}] `,
+                        )
+                      }
+                    />
                   </>
                 ) : (
                   <div
@@ -1671,7 +2037,12 @@ function CardModal({
                     onClick={() => setEditing(true)}
                   >
                     {draft.description ? (
-                      <Md text={draft.description} />
+                      <Md
+                        text={draft.description}
+                        refs={refsFor(draft.description)}
+                        open={goto}
+                        progress
+                      />
                     ) : (
                       <button type="button">
                         Add a more detailed description…
@@ -1695,6 +2066,34 @@ function CardModal({
                   </div>
                 )}
               </form>
+              {liveBacklinks.length > 0 && (
+                <section className="backlinks" aria-label="Mentioned in">
+                  <div className="section-heading">
+                    <Link2 size={18} />
+                    <h3>Mentioned in</h3>
+                  </div>
+                  <ul>
+                    {liveBacklinks.map((b: Backlink) => (
+                      <li key={b.name}>
+                        <button
+                          type="button"
+                          className={
+                            "backlink " + (b.archived ? "archived" : "")
+                          }
+                          aria-label={`Open card ${b.title}, in ${b.list_title}, mentioned in ${b.source}`}
+                          onClick={() => goto(b.name)}
+                        >
+                          <span className="picker-title">{b.title}</span>
+                          <small>
+                            {b.list_title} · {b.source}
+                            {b.archived ? " · archived" : ""}
+                          </small>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
               <div className="section-heading">
                 <Paperclip size={18} />
                 <h3>Attachments</h3>
@@ -1823,6 +2222,13 @@ function CardModal({
                       </option>
                     ))}
                   </select>
+                  <CardPicker
+                    board={board}
+                    exclude={name}
+                    compact
+                    label="# Link a card"
+                    onPick={(id) => setComment(comment + ` #[${id}] `)}
+                  />
                   <label
                     className="icon upload-label"
                     title="Attach to comment"
@@ -1892,7 +2298,11 @@ function CardModal({
                           {c.modified !== c.creation ? " · edited" : ""}
                         </time>
                         <div className="comment-content">
-                          <Md text={c.content} />
+                          <Md
+                            text={c.content}
+                            refs={refsFor(c.content)}
+                            open={goto}
+                          />
                         </div>
                         {data.attachments
                           .filter((f) => f.comment === c.name)

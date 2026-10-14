@@ -2575,3 +2575,190 @@ progress {
     transition: none !important;
   }
 }
+
+/* Card references */
+.cardref {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  vertical-align: bottom;
+  padding: 1px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--control);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.6;
+  cursor: pointer;
+}
+.cardref:hover {
+  background: var(--hover);
+}
+.cardref:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+.cardref-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cardref-state {
+  flex: none;
+  max-width: 9em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.cardref-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.cardref.done {
+  background: var(--success-bg);
+  color: var(--success-text);
+  border-color: transparent;
+}
+.cardref.done .cardref-state {
+  color: inherit;
+}
+.cardref.archived {
+  opacity: 0.7;
+  font-style: italic;
+}
+.cardref.unavailable {
+  cursor: default;
+  color: var(--muted);
+  border-style: dashed;
+  background: transparent;
+}
+.markdown li:has(> input[type="checkbox"]) {
+  list-style: none;
+}
+.markdown li > input[type="checkbox"] {
+  margin: 0 6px 0 -20px;
+}
+.checklist-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.checklist-progress progress {
+  flex: 1;
+  height: 4px;
+  min-width: 40px;
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  background: var(--control);
+  overflow: hidden;
+}
+.checklist-progress progress::-webkit-progress-bar {
+  background: var(--control);
+}
+.checklist-progress progress::-webkit-progress-value {
+  background: var(--success-text);
+}
+.checklist-progress progress::-moz-progress-bar {
+  background: var(--success-text);
+}
+.card-picker {
+  position: relative;
+  display: inline-block;
+}
+.picker-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.picker-popover {
+  position: absolute;
+  z-index: 30;
+  left: 0;
+  top: calc(100% + 4px);
+  width: min(320px, 80vw);
+  padding: 8px;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.picker-popover input[type="text"],
+.picker-popover input:not([type]),
+.picker-popover input[role="combobox"] {
+  width: 100%;
+}
+.picker-popover ul {
+  list-style: none;
+  margin: 6px 0;
+  padding: 0;
+  max-height: 220px;
+  overflow: auto;
+}
+.picker-popover li {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.picker-popover li.active,
+.picker-popover li:hover {
+  background: var(--selected);
+}
+.picker-popover small,
+.backlink small {
+  color: var(--muted);
+}
+.picker-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.picker-empty {
+  color: var(--muted);
+  cursor: default;
+}
+.picker-archived {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.backlinks ul {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.backlink {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+  background: var(--control);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+.backlink.archived {
+  opacity: 0.7;
+}
+.comment-controls .card-picker .picker-popover {
+  top: auto;
+  bottom: calc(100% + 4px);
+}

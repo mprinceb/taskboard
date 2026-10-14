@@ -26,6 +26,8 @@ export type Card = {
   assignees: string[];
   comment_count: number;
   attachment_count: number;
+  /** Cards referenced from this card's description and comments. */
+  references?: import("./cardrefs").CardRef[];
 };
 export type Notice = {
   name: string;
@@ -65,11 +67,15 @@ export type Comment = {
   creation: string;
   modified: string;
 };
+export type { CardRef, Backlink } from "./cardrefs";
+import type { CardRef, Backlink } from "./cardrefs";
 export type Detail = {
   card: Card;
   assignees: string[];
   comments: Comment[];
   attachments: Attachment[];
+  references?: CardRef[];
+  backlinks?: Backlink[];
 };
 export const csrf = () =>
   document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") ||

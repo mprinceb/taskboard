@@ -1,0 +1,55 @@
+{
+  "doctype": "DocType",
+  "name": "TB Card Link",
+  "module": "Taskboard",
+  "custom": 0,
+  "issingle": 0,
+  "autoname": "hash",
+  "engine": "InnoDB",
+  "field_order": [
+    "from_card",
+    "to_card",
+    "source",
+    "source_name"
+  ],
+  "fields": [
+    {
+      "fieldname": "from_card",
+      "fieldtype": "Link",
+      "label": "From Card",
+      "options": "TB Card",
+      "reqd": 1,
+      "search_index": 1
+    },
+    {
+      "fieldname": "to_card",
+      "fieldtype": "Data",
+      "label": "To Card",
+      "reqd": 1,
+      "search_index": 1
+    },
+    {
+      "fieldname": "source",
+      "fieldtype": "Select",
+      "label": "Source",
+      "options": "description\ncomment",
+      "reqd": 1
+    },
+    {
+      "fieldname": "source_name",
+      "fieldtype": "Data",
+      "label": "Source Name"
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 0
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC"
+}

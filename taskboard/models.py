@@ -26,3 +26,18 @@ class Card(Document):
         from taskboard.api import publish_change
 
         publish_change(self.name)
+        if self.flags.in_insert or self.has_value_changed("description"):
+            from taskboard.references import sync_links
+
+            self.flags.taskboard_new_references = sync_links(
+                self.name, self.description, "description"
+            )
+
+    def on_trash(self):
+        # Only this card's outgoing links go. Incoming rows are kept (to_card is
+        # a plain Data field) so a comment that still references a deleted card
+        # keeps resolving to an "unavailable" entry without rescanning comments.
+        for name in frappe.get_all(
+            "TB Card Link", filters={"from_card": self.name}, pluck="name"
+        ):
+            frappe.delete_doc("TB Card Link", name, ignore_permissions=True, force=True)

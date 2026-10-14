@@ -6,6 +6,7 @@ name = "taskboard"
 version = "0.1.0"
 description = "A focused, Trello-style task board for Frappe"
 requires-python = ">=3.10"
+dependencies = ["markdown-it-py>=3.0.0,<4"]
 license = {text = "MIT"}
 authors = [{name = "Taskboard contributors"}]
 [tool.setuptools.packages.find]

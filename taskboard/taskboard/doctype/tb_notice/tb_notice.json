@@ -28,7 +28,7 @@
       "fieldname": "kind",
       "fieldtype": "Select",
       "label": "Kind",
-      "options": "Invitation\nAssignment\nMention\nReminder"
+      "options": "Invitation\nAssignment\nMention\nReminder\ncard_reference"
     },
     {
       "fieldname": "subject",

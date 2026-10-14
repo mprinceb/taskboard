@@ -51,7 +51,7 @@ class TestTaskboard(unittest.TestCase):
 
     def card(self, **values):
         return api.save_card(
-            dict(title="Integration test", list_id=self.column, **values)
+            {"title": "Integration test", "list_id": self.column, **values}
         )["card"]
 
     def test_permissions_and_membership_removal(self):
@@ -372,3 +372,374 @@ class TestTaskboard(unittest.TestCase):
         self.assertIsNone(api.membership(self.member))
         with self.assertRaises(frappe.ValidationError):
             api.save_card({"name": c.name, "assignees": [self.member]})
+
+
+    # Card references: #[card_name] tokens in descriptions and comments.
+
+    def links(self, **filters):
+        return frappe.get_all(
+            "TB Card Link", filters=filters, fields=["from_card", "to_card", "source", "source_name"]
+        )
+
+    def test_parse_references(self):
+        from taskboard.references import parse_references
+
+        self.assertEqual(
+            parse_references("a #[abc] b #[def] #[abc] #[] #[ x ] @[u@x.y]"),
+            ["abc", "def"],
+        )
+        self.assertEqual(parse_references(None), [])
+
+    def test_parse_references_ignores_markdown_code(self):
+        from taskboard.references import parse_references
+
+        text = (
+            "real #[aaa111] and `#[bbb222]` and ``a #[ccc333] b``\n"
+            "```\n#[ddd444]\n```\n"
+            "~~~js\n#[eee555]\n~~~\n"
+            "after #[fff666]"
+        )
+        self.assertEqual(parse_references(text), ["aaa111", "fff666"])
+
+    def test_sync_idempotent_and_ignores_invalid(self):
+        a, b = self.card(), self.card(title="Target")
+        text = f"See #[{b.name}] and #[{b.name}] and #[{a.name}] and #[nope123456]"
+        api.save_card({"name": a.name, "description": text})
+        rows = self.links(from_card=a.name)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual((rows[0].to_card, rows[0].source), (b.name, "description"))
+        api.save_card({"name": a.name, "description": text + " again"})
+        self.assertEqual(len(self.links(from_card=a.name)), 1)
+        api.save_card({"name": a.name, "description": "gone"})
+        self.assertEqual(self.links(from_card=a.name), [])
+
+    def test_comment_links_and_delete_cleanup(self):
+        a, b = self.card(), self.card(title="Target")
+        name = api.save_comment(a.name, f"ref #[{b.name}]")
+        rows = self.links(from_card=a.name, source="comment")
+        self.assertEqual([(r.to_card, r.source_name) for r in rows], [(b.name, name)])
+        api.save_comment(a.name, f"ref #[{b.name}] edited", name=name)
+        self.assertEqual(len(self.links(from_card=a.name)), 1)
+        api.save_comment(a.name, "no ref", name=name)
+        self.assertEqual(self.links(from_card=a.name), [])
+        api.save_comment(a.name, f"again #[{b.name}]", name=name)
+        self.assertEqual(len(self.links(from_card=a.name)), 1)
+        api.delete_comment(name)
+        self.assertEqual(self.links(from_card=a.name), [])
+
+    def test_references_and_backlinks_payload(self):
+        a = self.card()
+        b = self.card(title="Open target")
+        done = self.card(title="Done target")
+        api.move_card(done.name, self.done)
+        gone = self.card(title="Doomed")
+        api.save_card(
+            {
+                "name": a.name,
+                "description": f"#[{done.name}] #[{b.name}] #[{gone.name}]",
+            }
+        )
+        api.save_comment(a.name, f"later #[{b.name}] #[{gone.name}]")
+        keys = {
+            "name", "title", "list_id", "list_title", "is_done",
+            "completed", "archived", "exists",
+        }
+        detail = api.detail(a.name)
+        refs = detail["references"]
+        self.assertEqual([r["name"] for r in refs], [done.name, b.name, gone.name])
+        for r in refs:
+            self.assertEqual(set(r), keys)
+        self.assertTrue(refs[0]["is_done"] and refs[0]["completed"])
+        self.assertEqual(refs[0]["list_title"], "Done " + self.suffix)
+        self.assertFalse(refs[1]["is_done"])
+        self.assertEqual(refs[1]["list_id"], self.column)
+        self.assertTrue(refs[1]["exists"])
+        # Deleted target keeps the token but is redacted.
+        frappe.delete_doc("TB Card", gone.name, force=True, ignore_permissions=True)
+        refs = api.detail(a.name)["references"]
+        self.assertEqual(
+            refs[2],
+            {
+                "name": gone.name, "exists": False, "title": "", "list_id": "",
+                "list_title": "", "is_done": False, "completed": False,
+                "archived": False,
+            },
+        )
+        back = api.detail(b.name)["backlinks"]
+        self.assertEqual(
+            back,
+            [
+                {
+                    "name": a.name,
+                    "title": a.title,
+                    "list_title": "Test " + self.suffix,
+                    "source": "description",
+                    "archived": False,
+                }
+            ],
+        )
+        board_card = [c for c in api.board()["cards"] if c.name == a.name][0]
+        self.assertEqual([r["name"] for r in board_card["references"]][:3], [done.name, b.name, gone.name])
+
+    def test_backlinks_archived_hidden_unless_only(self):
+        a, b = self.card(), self.card(title="Target")
+        api.save_card({"name": a.name, "description": f"#[{b.name}]"})
+        api.save_card({"name": a.name, "archived": 1})
+        self.assertEqual(len(api.detail(b.name)["backlinks"]), 1)
+        c = self.card(description=f"#[{b.name}]")
+        self.assertEqual([x["name"] for x in api.detail(b.name)["backlinks"]], [c.name])
+
+    def test_non_member_gets_redacted(self):
+        from taskboard.references import reference_payload
+
+        a = self.card()
+        frappe.set_user(self.outsider)
+        self.assertFalse(reference_payload([a.name])[0]["exists"])
+        self.assertEqual(reference_payload([a.name])[0]["title"], "")
+
+    def test_reference_notifications_and_dedupe(self):
+        target = self.card(title="Target", assignees=[self.member, self.admin])
+        src = self.card(title="Source")
+        kind = {"kind": "card_reference", "card": src.name}
+        api.save_card(
+            {"name": src.name, "description": f"see #[{target.name}] @[{self.member}]"}
+        )
+        # Actor (admin) excluded; member already notified through @mention.
+        self.assertEqual(frappe.db.count("TB Notice", kind), 0)
+        self.assertEqual(
+            frappe.db.count("TB Notice", {"kind": "Mention", "card": src.name}), 1
+        )
+        other = self.card(title="Other", assignees=[self.member])
+        api.save_card({"name": src.name, "description": f"see #[{other.name}]"})
+        self.assertEqual(
+            frappe.db.get_value(
+                "TB Notice", {**kind, "recipient": self.member}, "subject"
+            ),
+            f"{frappe.utils.get_fullname(self.admin)} referenced Other in Source",
+        )
+        self.assertEqual(frappe.db.count("TB Notice", kind), 1)
+        # Re-saving does not renotify.
+        api.save_card({"name": src.name, "description": f"see #[{other.name}] more"})
+        self.assertEqual(frappe.db.count("TB Notice", kind), 1)
+        # Comment reference notifies once, not on edit.
+        name = api.save_comment(src.name, f"#[{target.name}]")
+        count = frappe.db.count("TB Notice", kind)
+        self.assertEqual(count, 2)
+        api.save_comment(src.name, f"#[{target.name}] edit", name=name)
+        self.assertEqual(frappe.db.count("TB Notice", kind), count)
+
+    def test_edit_adding_reference_not_suppressed_by_old_mention(self):
+        src = self.card(title="Source")
+        target = self.card(title="Target", assignees=[self.member])
+        name = api.save_comment(src.name, f"hello @[{self.member}]")
+        kind = {"kind": "card_reference", "card": src.name}
+        self.assertEqual(frappe.db.count("TB Notice", kind), 0)
+        # The mention existed before the edit, so only the reference is new.
+        api.save_comment(
+            src.name, f"hello @[{self.member}] #[{target.name}]", name=name
+        )
+        self.assertEqual(
+            frappe.db.count("TB Notice", {**kind, "recipient": self.member}), 1
+        )
+        self.assertEqual(
+            frappe.db.count("TB Notice", {"kind": "Mention", "card": src.name}), 1
+        )
+
+    def test_reference_cap_and_batched_validation(self):
+        from taskboard.references import MAX_REFERENCES, parse_references
+
+        tokens = " ".join(f"#[tok{i:05d}]" for i in range(MAX_REFERENCES + 50))
+        self.assertEqual(len(parse_references(tokens)), MAX_REFERENCES)
+        self.assertEqual(parse_references("#[" + "x" * 141 + "]"), [])
+        a, b = self.card(), self.card(title="Real")
+        api.save_card({"name": a.name, "description": tokens + f" #[{b.name}]"})
+        # Real target past the cap is ignored; nonexistent tokens create no rows.
+        self.assertEqual(len(self.links(from_card=a.name)), 0)
+
+    def test_board_keeps_comment_reference_to_deleted_card(self):
+        src, target = self.card(title="Source"), self.card(title="Gone")
+        api.save_comment(src.name, f"see #[{target.name}]")
+        frappe.delete_doc("TB Card", target.name, force=True, ignore_permissions=True)
+        row = next(c for c in api.board()["cards"] if c["name"] == src.name)
+        self.assertEqual(
+            [(r["name"], r["exists"]) for r in row["references"]],
+            [(target.name, False)],
+        )
+        detail = api.detail(src.name)
+        self.assertEqual([r["exists"] for r in detail["references"]], [False])
+
+    def test_fence_needs_clean_closer(self):
+        from taskboard.references import parse_references
+
+        text = "~~~\n#[aaa111]\n~~~ trailing\n#[bbb222]\n~~~\n#[ccc333]"
+        self.assertEqual(parse_references(text), ["ccc333"])
+
+    def test_readded_comment_reference_notifies_again(self):
+        src = self.card(title="Source")
+        target = self.card(title="Target", assignees=[self.member])
+        kind = {"kind": "card_reference", "card": src.name, "recipient": self.member}
+        name = api.save_comment(src.name, f"#[{target.name}]")
+        self.assertEqual(frappe.db.count("TB Notice", kind), 1)
+        api.save_comment(src.name, "removed", name=name)
+        api.save_comment(src.name, f"#[{target.name}] back", name=name)
+        self.assertEqual(frappe.db.count("TB Notice", kind), 2)
+        # Saving without changing the reference must not notify.
+        api.save_comment(src.name, f"#[{target.name}] back again", name=name)
+        self.assertEqual(frappe.db.count("TB Notice", kind), 2)
+
+    def test_indented_code_is_ignored_but_list_continuation_is_not(self):
+        from taskboard.references import parse_references
+
+        text = "para\n\n    #[aaa111]\n\n- item\n\n    #[bbb222]\n\nafter #[ccc333]"
+        self.assertEqual(parse_references(text), ["bbb222", "ccc333"])
+        self.assertEqual(parse_references("    #[ddd444]"), [])
+
+    def test_deleted_target_keeps_incoming_rows_and_backlinks_cleaned(self):
+        a, b = self.card(title="A"), self.card(title="B")
+        api.save_comment(a.name, f"see #[{b.name}]")
+        api.save_card({"name": b.name, "description": f"back #[{a.name}]"})
+        frappe.delete_doc("TB Card", b.name, force=True, ignore_permissions=True)
+        # Incoming (A -> B) kept so board can show "unavailable"; B's own links go.
+        self.assertEqual(len(self.links(from_card=a.name)), 1)
+        self.assertEqual(len(self.links(from_card=b.name)), 0)
+
+    def test_multiline_code_span_is_ignored(self):
+        from taskboard.references import parse_references
+
+        text = "`example\n#[aaa111]\ntext` and #[bbb222]"
+        self.assertEqual(parse_references(text), ["bbb222"])
+        # A span cannot cross a list item or a blank line.
+        self.assertEqual(parse_references("- a `x\n- b y` #[ccc333]"), ["ccc333"])
+        self.assertEqual(parse_references("`x\n\n#[ddd444]\n\ny`"), ["ddd444"])
+
+    def test_editing_comment_keeps_row_for_deleted_target(self):
+        src, target = self.card(title="Source"), self.card(title="Gone")
+        name = api.save_comment(src.name, f"see #[{target.name}]")
+        frappe.delete_doc("TB Card", target.name, force=True, ignore_permissions=True)
+        api.save_comment(src.name, f"see #[{target.name}] edited", name=name)
+        self.assertEqual(len(self.links(from_card=src.name)), 1)
+        row = next(c for c in api.board()["cards"] if c["name"] == src.name)
+        self.assertEqual([r["exists"] for r in row["references"]], [False])
+        # Removing the token drops the retained row.
+        api.save_comment(src.name, "no reference", name=name)
+        self.assertEqual(len(self.links(from_card=src.name)), 0)
+
+    def test_escaped_token_and_list_after_blank_lines(self):
+        from taskboard.references import parse_references
+
+        self.assertEqual(parse_references("\\#[aaa111] #[bbb222]"), ["bbb222"])
+        # An even run of backslashes is an escaped backslash, so the token is real.
+        self.assertEqual(parse_references("\\\\#[ccc333]"), ["ccc333"])
+        # Verified against the renderer's parser: blank lines do not end a list,
+        # so this stays list-item content and is a real reference.
+        self.assertEqual(parse_references("- item\n\n\n    #[ddd444]"), ["ddd444"])
+
+    def test_fences_nested_in_quotes_and_lists(self):
+        from taskboard.references import parse_references
+
+        self.assertEqual(
+            parse_references("> ```\n> #[aaa111]\n> ```\n#[bbb222]"), ["bbb222"]
+        )
+        self.assertEqual(
+            parse_references("- ```\n  #[ccc333]\n  ```\n#[ddd444]"), ["ddd444"]
+        )
+        # A fence opened in a quote ends where the quote does.
+        self.assertEqual(
+            parse_references("> ```\n> #[eee555]\n\n#[fff666]"), ["fff666"]
+        )
+
+    def test_never_valid_tokens_are_not_references(self):
+        a, b = self.card(title="A"), self.card(title="Gone")
+        api.save_card(
+            {"name": a.name, "description": f"typo #[nope123456] and #[{b.name}]"}
+        )
+        names = [r["name"] for r in api.detail(a.name)["references"]]
+        self.assertEqual(names, [b.name])
+        frappe.delete_doc("TB Card", b.name, force=True, ignore_permissions=True)
+        refs = api.detail(a.name)["references"]
+        # The deleted target keeps its "unavailable" entry; the typo still has none.
+        self.assertEqual([(r["name"], r["exists"]) for r in refs], [(b.name, False)])
+
+    def test_shared_reference_cases(self):
+        """The frontend runs the same fixture (frontend/src/cardrefs.test.ts)."""
+        import json
+        import os
+
+        from taskboard.references import parse_references
+
+        path = os.path.join(
+            os.path.dirname(__file__), "..", "tests", "reference_cases.json"
+        )
+        with open(path) as f:
+            cases = json.load(f)
+        for case in cases:
+            with self.subTest(case["name"]):
+                self.assertEqual(parse_references(case["text"]), case["ids"])
+
+    def test_patch_decodes_escaped_comments(self):
+        from html import escape as html_escape
+
+        from taskboard.patches.backfill_card_links import execute
+
+        src, target = self.card(title="Source"), self.card(title="Target")
+        comment = frappe.get_doc(
+            dict(
+                doctype="Comment",
+                comment_type="Comment",
+                reference_doctype="TB Card",
+                reference_name=src.name,
+                # A quoted fence as the app stores it (html-escaped).
+                content=html_escape(f"> ```\n> #[{target.name}]\n> ```"),
+            )
+        ).insert(ignore_permissions=True)
+        execute()
+        self.assertEqual(len(self.links(from_card=src.name)), 0)
+        self.assertTrue(comment.name)
+
+    def test_deleted_evidence_is_scoped_to_the_referencing_card(self):
+        a, b, c = self.card(title="A"), self.card(title="B"), self.card(title="C")
+        api.save_card({"name": a.name, "description": f"see #[{b.name}]"})
+        frappe.delete_doc("TB Card", b.name, force=True, ignore_permissions=True)
+        # A saw it before deletion, so it keeps the "unavailable" entry.
+        self.assertEqual(
+            [(r["name"], r["exists"]) for r in api.detail(a.name)["references"]],
+            [(b.name, False)],
+        )
+        # C names the deleted id only after deletion: no evidence, no reference.
+        api.save_card({"name": c.name, "description": f"late #[{b.name}]"})
+        self.assertEqual(api.detail(c.name)["references"], [])
+        board = {x["name"]: x for x in api.board()["cards"]}
+        self.assertEqual(len(board[a.name]["references"]), 1)
+        self.assertEqual(board[c.name]["references"], [])
+
+    def test_readded_mention_with_reference_still_notifies_reference(self):
+        src = self.card(title="Source")
+        target = self.card(title="Target", assignees=[self.member])
+        kind = {"kind": "card_reference", "card": src.name, "recipient": self.member}
+        name = api.save_comment(src.name, f"hi @[{self.member}]")
+        api.save_comment(src.name, "removed", name=name)
+        # The mention key was used on the first save, so no new mention notice is
+        # created now; the reference notice must therefore still go out.
+        api.save_comment(
+            src.name, f"hi @[{self.member}] #[{target.name}]", name=name
+        )
+        self.assertEqual(frappe.db.count("TB Notice", kind), 1)
+
+    def test_notification_fanout_is_capped(self):
+        from taskboard.api import MAX_NOTIFIED_TARGETS
+
+        src = self.card(title="Source")
+        targets = [
+            self.card(title=f"T{i}", assignees=[self.member])
+            for i in range(MAX_NOTIFIED_TARGETS + 5)
+        ]
+        text = " ".join(f"#[{t.name}]" for t in targets)
+        api.save_card({"name": src.name, "description": text})
+        count = frappe.db.count(
+            "TB Notice",
+            {"kind": "card_reference", "card": src.name, "recipient": self.member},
+        )
+        self.assertEqual(count, MAX_NOTIFIED_TARGETS)
+        # Links are still recorded for every real target.
+        self.assertEqual(len(self.links(from_card=src.name)), len(targets))
+

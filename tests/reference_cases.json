@@ -1,0 +1,130 @@
+[
+  {
+    "name": "plain tokens",
+    "text": "see #[abcdef] and #[ghijkl]",
+    "ids": [
+      "abcdef",
+      "ghijkl"
+    ]
+  },
+  {
+    "name": "inline code",
+    "text": "`#[abcdef]` #[ghijkl]",
+    "ids": [
+      "ghijkl"
+    ]
+  },
+  {
+    "name": "fenced block",
+    "text": "```\n#[abcdef]\n```\n#[ghijkl]",
+    "ids": [
+      "ghijkl"
+    ]
+  },
+  {
+    "name": "fence needs clean closer",
+    "text": "~~~\n#[abcdef]\n~~~ trailing\n#[ghijkl]\n~~~\n#[mnopqr]",
+    "ids": [
+      "mnopqr"
+    ]
+  },
+  {
+    "name": "indented code",
+    "text": "para\n\n    #[abcdef]\n\nafter #[ghijkl]",
+    "ids": [
+      "ghijkl"
+    ]
+  },
+  {
+    "name": "list continuation is not code",
+    "text": "- item\n\n    #[abcdef]",
+    "ids": [
+      "abcdef"
+    ]
+  },
+  {
+    "name": "blank lines do not end a list",
+    "text": "- item\n\n\n    #[abcdef]",
+    "ids": [
+      "abcdef"
+    ]
+  },
+  {
+    "name": "escaped token",
+    "text": "\\#[abcdef] #[ghijkl]",
+    "ids": [
+      "ghijkl"
+    ]
+  },
+  {
+    "name": "escaped backslash",
+    "text": "\\\\#[abcdef]",
+    "ids": [
+      "abcdef"
+    ]
+  },
+  {
+    "name": "multiline code span",
+    "text": "`example\n#[abcdef]\ntext` and #[ghijkl]",
+    "ids": [
+      "ghijkl"
+    ]
+  },
+  {
+    "name": "span cannot cross list items",
+    "text": "- a `x\n- b y` #[abcdef]",
+    "ids": [
+      "abcdef"
+    ]
+  },
+  {
+    "name": "fence in blockquote",
+    "text": "> ```\n> #[abcdef]\n> ```\n#[ghijkl]",
+    "ids": [
+      "ghijkl"
+    ]
+  },
+  {
+    "name": "fence in list item",
+    "text": "- ```\n  #[abcdef]\n  ```\n#[ghijkl]",
+    "ids": [
+      "ghijkl"
+    ]
+  },
+  {
+    "name": "quoted fence ends with the quote",
+    "text": "> ```\n> #[abcdef]\n\n#[ghijkl]",
+    "ids": [
+      "ghijkl"
+    ]
+  },
+  {
+    "name": "link text is not a reference",
+    "text": "[link #[abcdef]](https://x.y) #[ghijkl]",
+    "ids": [
+      "ghijkl"
+    ]
+  },
+  {
+    "name": "headings and tables",
+    "text": "# Heading #[abcdef]\n\n| a | b |\n|---|---|\n| #[ghijkl] | x |",
+    "ids": [
+      "abcdef",
+      "ghijkl"
+    ]
+  },
+  {
+    "name": "bare http url is a link",
+    "text": "https://example.test/#[abcdef] #[ghijkl]",
+    "ids": [
+      "ghijkl"
+    ]
+  },
+  {
+    "name": "bare www url is a link",
+    "text": "see www.example.test/#[abcdef] and #[ghijkl]",
+    "ids": [
+      "ghijkl"
+    ]
+  }
+]
