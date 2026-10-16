@@ -399,7 +399,7 @@ export function Timeline(p: Props) {
           {p.busy ? " · Saving…" : ""}
         </div>
       )}
-      <div ref={scroll} className="timeline-scroll">
+      <div ref={scroll} className="timeline-scroll" tabIndex={0} role="region" aria-label="Scrollable task timeline">
         <div
           className="timeline-grid"
           style={{

@@ -2953,7 +2953,8 @@ progress {
 .timeline-head .date-grid > span { background: #24262b; }
 .interactive-timeline .date-grid .weekend { background: #292c32; }
 .timeline-calendar-shading .weekend { background: #ffffff04; }
-.timeline-scroll { scrollbar-color: #59616d #202225; }
+.timeline-scroll { scrollbar-width: none; }
+.timeline-scroll::-webkit-scrollbar { display: none; }
 @media (max-width: 700px) {
   .interactive-timeline { --timeline-sidebar: 164px; }
   .filterbar { padding: 8px 12px; }
