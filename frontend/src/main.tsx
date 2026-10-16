@@ -495,7 +495,11 @@ function App() {
     setBusy(true);
     setError("");
     try {
-      const result = await api<Detail>("save_card", { data }, true);
+      const result = await api<Detail>(
+        "save_card",
+        { data: { due_date: today(), ...data } },
+        true,
+      );
       const card = {
         ...result.card,
         assignees: result.assignees,
@@ -1501,7 +1505,7 @@ function CardComposer({
       seed.list_id || board.lists.find((l) => !l.archived)?.name || "",
     ),
     [start, setStart] = useState(seed.start_date || ""),
-    [due, setDue] = useState(seed.due_date || ""),
+    [due, setDue] = useState(seed.due_date || seed.start_date || today()),
     [description, setDescription] = useState(""),
     [selected, setSelected] = useState<string[]>([]),
     [busy, setBusy] = useState(false),
