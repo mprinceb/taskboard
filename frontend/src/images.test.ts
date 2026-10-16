@@ -26,3 +26,30 @@ test("isImageName matches raster images only", () => {
   assert.ok(!isImageName("a.svg"));
   assert.ok(!isImageName("a.pdf"));
 });
+
+import {
+  imageMarkdown,
+  insertSnippet,
+  pastedImageName,
+  pastedImages,
+} from "./images";
+
+test("pasted image helpers", () => {
+  const d = new Date(2026, 0, 5, 7, 8, 9);
+  assert.equal(pastedImageName("image/png", d), "pasted-20260105-070809.png");
+  assert.equal(pastedImageName("image/jpeg", d, 1), "pasted-20260105-070809-2.jpg");
+  const f = (type: string) => ({ type }) as File;
+  assert.equal(
+    pastedImages([f("image/png"), f("text/plain"), f("image/svg+xml")]).length,
+    1,
+  );
+  assert.equal(pastedImages(null).length, 0);
+  assert.equal(imageMarkdown("/private/files/a b.png"), "![](/private/files/a%20b.png)");
+});
+
+test("insertSnippet places images on their own line", () => {
+  assert.deepEqual(insertSnippet("", 0, 0, "X"), { text: "X", cursor: 1 });
+  assert.equal(insertSnippet("ab", 2, 2, "X").text, "ab\nX");
+  assert.equal(insertSnippet("ab\n", 3, 3, "X").text, "ab\nX");
+  assert.equal(insertSnippet("ab cd", 2, 3, "X").text, "ab\nX\ncd");
+});

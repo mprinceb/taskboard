@@ -146,7 +146,7 @@ export function upload(
   file: File,
   comment: string | undefined,
   onProgress: (n: number) => void,
-): Promise<void> {
+): Promise<{ file_url: string; file_name: string }> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/api/method/taskboard.api.upload");
@@ -172,7 +172,7 @@ export function upload(
         return;
       }
       if (xhr.status >= 400 || data.exc) reject(new Error(errorMessage(data)));
-      else resolve();
+      else resolve(data.message);
     };
     const form = new FormData();
     form.append("card", card);

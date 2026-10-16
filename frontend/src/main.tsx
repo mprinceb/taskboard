@@ -41,7 +41,14 @@ import {
 } from "lucide-react";
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { isImageName, safeImageSrc } from "./images";
+import {
+  imageMarkdown,
+  insertSnippet,
+  isImageName,
+  pastedImageName,
+  pastedImages,
+  safeImageSrc,
+} from "./images";
 import {
   api,
   get,
@@ -1797,11 +1804,13 @@ function CardModal({
       setBusy(false);
     }
   };
+  const [pasting, setPasting] = useState(false);
   const change = (key: string, value: any) => {
     setDraft({ ...draft, [key]: value });
     setDirty(true);
   };
   const uploadFiles = async (files: File[], id?: string) => {
+    const urls: string[] = [];
     for (const file of files) {
       if (file.size > board.settings.max_upload_mb * 1024 * 1024)
         throw new Error(
@@ -1809,11 +1818,49 @@ function CardModal({
         );
       setProgress(0);
       try {
-        await upload(name, file, id, setProgress);
+        urls.push((await upload(name, file, id, setProgress)).file_url);
       } finally {
         setProgress(null);
       }
     }
+    return urls;
+  };
+  // Paste-to-attach: upload clipboard images, then insert ![](url) at the cursor.
+  const pasteImages = (
+    e: React.ClipboardEvent<HTMLTextAreaElement>,
+    apply: (value: string) => void,
+  ) => {
+    const images = pastedImages(e.clipboardData.files);
+    if (!images.length) return;
+    e.preventDefault();
+    const box = e.currentTarget,
+      now = new Date();
+    const { selectionStart: start, selectionEnd: end } = box;
+    const value = box.value;
+    void (async () => {
+      setError("");
+      setPasting(true);
+      try {
+        const urls = await uploadFiles(
+          images.map(
+            (f, i) =>
+              new File([f], pastedImageName(f.type, now, i), { type: f.type }),
+          ),
+        );
+        const r = insertSnippet(
+          value,
+          start,
+          end,
+          urls.map(imageMarkdown).join("\n"),
+        );
+        apply(r.text);
+        setData(await get<Detail>("detail", { name }));
+      } catch (err) {
+        setError("Pasted image was not attached: " + (err as Error).message);
+      } finally {
+        setPasting(false);
+      }
+    })();
   };
   const toggleComplete = async () => {
     if (!data || busy || completing.current) return;
@@ -2092,8 +2139,12 @@ function CardModal({
                       aria-label="Card description"
                       value={draft.description || ""}
                       onChange={(e) => change("description", e.target.value)}
+                      onPaste={(e) =>
+                        pasteImages(e, (v) => change("description", v))
+                      }
                       placeholder="What needs to be done?"
                     />
+                    {pasting && <small className="muted">Uploading pasted image…</small>}
                     <small className="muted">
                       Markdown supported: **bold**, lists and links.
                     </small>
@@ -2310,8 +2361,10 @@ function CardModal({
                   placeholder="Write a comment…"
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
+                  onPaste={(e) => pasteImages(e, setComment)}
                   required
                 />
+                {pasting && <small className="muted">Uploading pasted image…</small>}
                 <div className="comment-controls">
                   <select
                     aria-label="Mention a member"
