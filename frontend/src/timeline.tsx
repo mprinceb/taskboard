@@ -101,26 +101,15 @@ export function Timeline(p: Props) {
   useEffect(() => {
     const element = scroll.current;
     if (!element) return;
-    let lastDateStep = 0;
     const wheel = (event: WheelEvent) => {
-      if (event.ctrlKey || event.metaKey || gesture.current) return;
-      const target = event.target instanceof Element ? event.target : null;
-      if (target?.closest(".timeline-list-label")) return;
-      // Keep native horizontal trackpad gestures. Translate a mouse wheel over
-      // the date grid; the status column remains the vertical scrolling area.
-      if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
-      if (!event.deltaY) return;
+      // Leave ordinary vertical wheels and native horizontal trackpad gestures
+      // alone. Only translate Shift+vertical wheel into horizontal movement.
+      if (!event.shiftKey || event.ctrlKey || event.metaKey || gesture.current) return;
+      if (event.deltaX || !event.deltaY) return;
+      if (element.scrollWidth <= element.clientWidth + 1) return;
       const delta = event.deltaY * (event.deltaMode === 1 ? 20 : event.deltaMode === 2 ? element.clientWidth : 1);
-      if (element.scrollWidth > element.clientWidth + 1) {
-        event.preventDefault();
-        element.scrollLeft += delta;
-      } else if (target?.closest(".date-grid")) {
-        event.preventDefault();
-        if (event.timeStamp - lastDateStep > 120) {
-          lastDateStep = event.timeStamp;
-          setAnchor((date) => shiftDate(date, Math.sign(delta)));
-        }
-      }
+      event.preventDefault();
+      element.scrollLeft += delta;
     };
     element.addEventListener("wheel", wheel, { passive: false });
     return () => element.removeEventListener("wheel", wheel);
