@@ -2837,3 +2837,32 @@ progress {
   .outside-tasks li { grid-template-columns: 1fr; gap: 4px; }
   .outside-tasks li > span { padding-left: 11px; }
 }
+
+/* Task details remain legible at each timeline zoom level. */
+.timeline-packed-row { min-height: 64px; }
+.interactive-timeline .timeline-bar { height: 54px; }
+.interactive-timeline .range-body { align-items: center; }
+.range-handle::after { top: 19px; }
+.timeline-task-copy { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 3px; overflow: hidden; text-align: left; }
+.timeline-task-title { flex: none; }
+.timeline-task-meta { display: flex; gap: 8px; align-items: center; font-size: 11px; font-weight: 400; color: #d1d6e0; overflow: hidden; white-space: nowrap; }
+.timeline-task-meta > span { flex-shrink: 0; }
+.timeline-task-meta > span:not(.task-label):not(.task-priority) { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+.task-label, .task-priority { display: inline-flex; align-items: center; border-radius: 3px; font-size: 11px; line-height: 16px; padding: 0 5px; }
+.task-label { background: #ffffff12; color: #e0d8f1; border: 1px solid #ffffff1a; }
+.task-priority { background: #ffffff12; color: #d4d7de; }
+.priority-high { background: #634324; color: #ffe3b7; }
+.priority-urgent { background: #663230; color: #ffdad5; }
+.priority-low { color: #bcd4f0; }
+.task-badges { display: flex; gap: 5px; flex-wrap: wrap; }
+.task-badges:empty { display: none; }
+.task-metadata-fields { display: grid; grid-template-columns: minmax(0, 2fr) minmax(100px, 1fr); gap: 12px; }
+.task-metadata-fields small { color: var(--muted); font-size: 11px; font-weight: 400; }
+.task-activity { margin-bottom: 24px; border-bottom: 1px solid var(--line); padding-bottom: 14px; }
+.task-activity summary { cursor: pointer; font-size: 14px; font-weight: 600; }
+.task-activity summary span { color: var(--muted); font-size: 12px; }
+.task-activity ol { list-style: none; padding: 0; max-height: 260px; overflow: auto; }
+.task-activity li { border-left: 2px solid #76638e; margin: 12px 0; padding: 0 10px; font-size: 12px; overflow-wrap: anywhere; }
+.task-activity p { margin: 4px 0; }
+.task-activity time { color: var(--muted); font-size: 11px; }
+@media (max-width: 540px) { .task-metadata-fields { grid-template-columns: 1fr; gap: 0; } }

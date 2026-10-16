@@ -1,6 +1,7 @@
 import {
   PointerEvent as ReactPointerEvent,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -16,6 +17,7 @@ import {
   X,
   ArrowUpRight,
 } from "lucide-react";
+import { taskChecklistProgress } from "./cardrefs";
 import type { Card, Column, Member } from "./api";
 import {
   cardRange,
@@ -33,6 +35,8 @@ export type NewCardSeed = {
 };
 type Props = {
   cards: Card[];
+  allCards: Card[];
+  allLists: Column[];
   lists: Column[];
   busy: boolean;
   members: Member[];
@@ -66,6 +70,17 @@ const label = (d: string) =>
     day: "numeric",
   });
 export function Timeline(p: Props) {
+  const checklistByCard = useMemo(() => {
+    const cards = new Map(p.allCards.map((c) => [c.name, c]));
+    const doneLists = new Set(p.allLists.filter((l) => l.is_done).map((l) => l.name));
+    return new Map(p.allCards.map((c) => {
+      const known = new Set((c.references || []).map((r) => r.name));
+      return [c.name, taskChecklistProgress(c.description || "", (id) => {
+        const linked = cards.get(id);
+        return !!linked && (!!linked.completed || doneLists.has(linked.list_id));
+      }, (id) => known.has(id))];
+    }));
+  }, [p.allCards, p.allLists]);
   const [scale, setScale] = useState(14),
     [anchor, setAnchor] = useState(localToday()),
     [preview, setPreview] = useState<Preview | null>(null),
@@ -513,6 +528,8 @@ export function Timeline(p: Props) {
                             const overdue = !c.completed && !!c.due_date && c.due_date < localToday();
                             const blocked = !c.completed && /\bblocked\b/i.test(list.title);
                             const owners = c.assignees.map((user) => p.members.find((m) => m.user === user)?.full_name || user).join(", ") || "Unassigned";
+                            const progress = checklistByCard.get(c.name) || { done: 0, total: 0 };
+                            const labels = (c.labels || "").split(",").map((x) => x.trim()).filter(Boolean);
                             const state = c.completed ? "Completed" : blocked ? "Blocked" : overdue ? "Overdue" : "Scheduled";
                             return (
                               <div
@@ -540,7 +557,7 @@ export function Timeline(p: Props) {
                                 <button
                                   className="range-body"
                                   aria-label={`${c.title} · ${state} · Owner: ${owners} · ${c.start_date || "No start date"} to ${c.due_date || "No due date"}`}
-                                  data-tooltip={`${c.title}\nOwner: ${owners}\nStart: ${c.start_date || "Not set"} · Due: ${c.due_date || "Not set"}\n${state} · Drag to move; arrow keys adjust dates.`}
+                                  data-tooltip={`${c.title}\nOwner: ${owners}\nStart: ${c.start_date || "Not set"} · Due: ${c.due_date || "Not set"}\nPriority: ${c.priority || "None"} · Labels: ${labels.join(", ") || "None"}${progress.total ? ` · Checklist: ${progress.done}/${progress.total}` : ""}\n${state} · Drag to move; arrow keys adjust dates.`}
                                   disabled={p.busy}
                                   onPointerDown={(e) =>
                                     begin(e, "move", list.name, c)
@@ -551,7 +568,16 @@ export function Timeline(p: Props) {
                                   }}
                                 >
                                   {c.completed ? <Check className="task-state-icon" size={14} aria-label="Completed" /> : blocked ? <Ban className="task-state-icon" size={14} aria-label="Blocked" /> : overdue ? <AlertTriangle className="task-state-icon" size={14} aria-label="Overdue" /> : null}
-                                  <span className="timeline-task-title">{c.title}</span>
+                                  <span className="timeline-task-copy">
+                                    <span className="timeline-task-title">{c.title}</span>
+                                    <span className="timeline-task-meta">
+                                      {c.priority && c.priority !== "None" && <span className={`task-priority priority-${c.priority.toLowerCase()}`}>{c.priority}</span>}
+                                      <span>{owners}</span>
+                                      {labels.map((x) => <span className="task-label" key={x}>{x}</span>)}
+                                      <span>Due {c.due_date ? label(c.due_date) : "not set"}</span>
+                                      {progress.total > 0 && <span aria-label={`${progress.done} of ${progress.total} checklist items complete`}>☑ {progress.done}/{progress.total}</span>}
+                                    </span>
+                                  </span>
                                 </button>
                                 {original.end <= dates[scale - 1] && (
                                   <button

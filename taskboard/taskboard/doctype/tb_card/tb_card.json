@@ -9,6 +9,8 @@
   "field_order": [
     "title",
     "description",
+    "labels",
+    "priority",
     "list_id",
     "position",
     "start_date",
@@ -28,6 +30,20 @@
       "fieldname": "description",
       "fieldtype": "Long Text",
       "label": "Description"
+    },
+    {
+      "fieldname": "labels",
+      "fieldtype": "Data",
+      "label": "Labels",
+      "length": 500,
+      "description": "Comma-separated labels"
+    },
+    {
+      "fieldname": "priority",
+      "fieldtype": "Select",
+      "label": "Priority",
+      "options": "None\nLow\nMedium\nHigh\nUrgent",
+      "default": "None"
     },
     {
       "fieldname": "list_id",

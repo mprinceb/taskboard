@@ -30,6 +30,7 @@ export type Backlink = {
 // "What is code / prose" is decided by the same parser the renderer uses
 // (react-markdown + remark-gfm), never re-derived by hand.
 type MdNode = {
+  checked?: boolean | null;
   type: string;
   children?: MdNode[];
   position?: {
@@ -175,4 +176,22 @@ export function doneFromRefs(refs: CardRef[]): Done {
     const r = by.get(id);
     return !!r && r.exists && r.is_done;
   };
+}
+
+/** Markdown task items, with linked-task completion resolved from live board state. */
+export function taskChecklistProgress(text: string, isDone: Done, known?: (id: string) => boolean) {
+  let done = 0, total = 0;
+  const visit = (node: MdNode) => {
+    if (node.type === "listItem" && typeof node.checked === "boolean") {
+      const raw = text.slice(node.position?.start.offset, node.position?.end.offset).split("\n")[0];
+      const linked = parseChecklistLine(raw);
+      if (!linked || !known || known(linked.id)) {
+        total++;
+        if (linked ? isDone(linked.id) : node.checked) done++;
+      }
+    }
+    node.children?.forEach(visit);
+  };
+  visit(parseMarkdown(text));
+  return { done, total };
 }

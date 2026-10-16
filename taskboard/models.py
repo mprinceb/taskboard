@@ -16,6 +16,12 @@ class Card(Document):
             and getdate(self.start_date) > getdate(self.due_date)
         ):
             frappe.throw("Due date must be on or after the start date.")
+        if self.priority not in (None, "", "None", "Low", "Medium", "High", "Urgent"):
+            frappe.throw("Choose a valid priority.")
+        labels = list(dict.fromkeys(x.strip() for x in (self.labels or "").split(",") if x.strip()))
+        if len(labels) > 12 or any(len(x) > 40 for x in labels):
+            frappe.throw("Use up to 12 labels, each at most 40 characters.")
+        self.labels = ", ".join(labels)
         column = frappe.get_doc("TB List", self.list_id)
         if column.archived and not self.archived:
             frappe.throw("Restore the list before moving cards into it.")

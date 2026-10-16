@@ -90,6 +90,8 @@ def board():
             "name",
             "title",
             "description",
+            "labels",
+            "priority",
             "list_id",
             "position",
             "start_date",
@@ -173,6 +175,40 @@ def board():
     )
 
 
+def card_activity(doc, comments, files):
+    """Membership is checked by detail before reading this card's audit history."""
+    events = [dict(name="created", user=doc.owner, date=doc.creation, text="Created task")]
+    fields = {f.fieldname: f.label for f in frappe.get_meta("TB Card").fields}
+    for version in frappe.get_all(
+        "Version", filters={"ref_doctype": "TB Card", "docname": doc.name},
+        fields=["name", "owner", "creation", "data"], order_by="creation desc", limit_page_length=100,
+    ):
+        changes = frappe.parse_json(version.data or "{}")
+        summaries = []
+        for field, old, new in changes.get("changed", []):
+            if field not in fields:
+                continue
+            if field in {"description", "title"}:
+                summaries.append("Updated " + fields[field].lower())
+            elif field == "list_id":
+                summaries.append("Status: " + str(frappe.db.get_value("TB List", old, "title") or old or "—") + " → " + str(frappe.db.get_value("TB List", new, "title") or new or "—"))
+            else:
+                summaries.append(fields[field] + ": " + str(old if old is not None else "—") + " → " + str(new if new is not None else "—"))
+        if summaries:
+            events.append(dict(name="version:" + str(version.name), user=version.owner, date=version.creation, text="; ".join(summaries)))
+    for c in comments:
+        events.append(dict(name="comment:" + c.name, user=c.owner, date=c.creation, text="Added a comment"))
+        if c.modified != c.creation:
+            events.append(dict(name="comment-edit:" + c.name, user=c.modified_by, date=c.modified, text="Edited a comment"))
+    for f in files:
+        events.append(dict(name="file:" + f.name, user=f.owner, date=f.creation, text="Attached " + f.file_name))
+    for row in frappe.get_all("ToDo", filters={"reference_type": "TB Card", "reference_name": doc.name}, fields=["name", "owner", "creation", "modified", "allocated_to", "status", "modified_by"]):
+        events.append(dict(name="assignment:" + row.name, user=row.owner, date=row.creation, text="Assigned to " + row.allocated_to))
+        if row.status == "Cancelled":
+            events.append(dict(name="unassignment:" + row.name, user=row.modified_by, date=row.modified, text="Removed assignment for " + row.allocated_to))
+    return sorted(events, key=lambda e: str(e["date"]), reverse=True)
+
+
 @frappe.whitelist()
 def detail(name):
     doc = card_doc(name)
@@ -183,7 +219,7 @@ def detail(name):
             "reference_name": name,
             "comment_type": "Comment",
         },
-        fields=["name", "content", "owner", "creation", "modified"],
+        fields=["name", "content", "owner", "creation", "modified", "modified_by"],
         order_by="creation asc",
     )
     files = frappe.db.sql(
@@ -209,6 +245,7 @@ def detail(name):
         attachments=files,
         references=reference_payload(refs, source=name),
         backlinks=backlinks(name),
+        activity=card_activity(doc, comments, files),
     )
 
 
@@ -241,6 +278,8 @@ def save_card(data):
     for key in [
         "title",
         "description",
+        "labels",
+        "priority",
         "list_id",
         "start_date",
         "due_date",

@@ -743,3 +743,20 @@ class TestTaskboard(unittest.TestCase):
         # Links are still recorded for every real target.
         self.assertEqual(len(self.links(from_card=src.name)), len(targets))
 
+
+    def test_metadata_and_activity_are_persisted_and_member_scoped(self):
+        card = self.card(labels=" Accounts, ERP, Accounts ", priority="High")
+        self.assertEqual(card.labels, "Accounts, ERP")
+        self.assertEqual(card.priority, "High")
+        doc = frappe.get_doc("TB Card", card.name)
+        doc.priority = "Urgent"
+        doc.save(ignore_permissions=True, ignore_version=False)
+        result = api.detail(card.name)
+        self.assertTrue(any("Priority" in event["text"] for event in result["activity"]))
+        self.assertTrue(any(event["text"] == "Created task" for event in result["activity"]))
+        frappe.set_user(self.outsider)
+        with self.assertRaises(frappe.PermissionError):
+            api.detail(card.name)
+        frappe.set_user(self.admin)
+        with self.assertRaises(frappe.ValidationError):
+            self.card(priority="Not a priority")

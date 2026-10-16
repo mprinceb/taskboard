@@ -16,6 +16,8 @@ export type Card = {
   name: string;
   title: string;
   description: string;
+  labels?: string;
+  priority?: string;
   list_id: string;
   position: number;
   start_date: string | null;
@@ -69,7 +71,9 @@ export type Comment = {
 };
 export type { CardRef, Backlink } from "./cardrefs";
 import type { CardRef, Backlink } from "./cardrefs";
+export type Activity = { name: string; user: string; date: string; text: string };
 export type Detail = {
+  activity?: Activity[];
   card: Card;
   assignees: string[];
   comments: Comment[];

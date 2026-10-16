@@ -59,7 +59,7 @@ import {
   CARDREF_PROTOCOL,
   linkifyRefs,
   syncChecklist,
-  checklistProgress,
+  taskChecklistProgress,
   doneFromRefs,
   extractIds,
 } from "./cardrefs";
@@ -186,7 +186,7 @@ function Md({
   const byId = new Map(refs.map((r) => [r.name, r]));
   const done = doneFromRefs(refs);
   const stats = progress
-    ? checklistProgress(text, done, (id) => byId.has(id))
+    ? taskChecklistProgress(text, done, (id) => byId.has(id))
     : null;
   const source = linkifyRefs(syncChecklist(text, done)).replace(
     /@\[([^\]]+)\]/g,
@@ -198,7 +198,7 @@ function Md({
         <div
           className="checklist-progress"
           role="group"
-          aria-label={`${stats.done} of ${stats.total} linked cards done`}
+          aria-label={`${stats.done} of ${stats.total} checklist items done`}
         >
           <span>
             {stats.done}/{stats.total} done
@@ -420,6 +420,9 @@ function App() {
     [query, setQuery] = useState(""),
     [assignee, setAssignee] = useState(""),
     [overdue, setOverdue] = useState(false),
+    [labelFilter, setLabelFilter] = useState(""),
+    [priorityFilter, setPriorityFilter] = useState(""),
+    [statusFilter, setStatusFilter] = useState(""),
     [card, setCard] = useState<string | null>(
       new URLSearchParams(location.search).get("card"),
     ),
@@ -523,6 +526,9 @@ function App() {
       setQuery("");
       setAssignee("");
       setOverdue(false);
+      setLabelFilter("");
+      setPriorityFilter("");
+      setStatusFilter("");
       return card;
     } finally {
       mutation.current = false;
@@ -637,10 +643,13 @@ function App() {
       (c) =>
         !c.archived &&
         (!query ||
-          (c.title + " " + c.description)
+          (c.title + " " + c.description + " " + (c.labels || "") + " " + c.assignees.map((u) => board.members.find((m) => m.user === u)?.full_name || u).join(" "))
             .toLowerCase()
             .includes(query.toLowerCase())) &&
         (!assignee || c.assignees.includes(assignee)) &&
+        (!labelFilter || (c.labels || "").split(",").map((x) => x.trim()).includes(labelFilter)) &&
+        (!priorityFilter || (c.priority || "None") === priorityFilter) &&
+        (!statusFilter || c.list_id === statusFilter) &&
         (!overdue || (!!c.due_date && c.due_date < today() && !c.completed)),
     );
   return (
@@ -778,6 +787,18 @@ function App() {
           <Clock size={14} />
           Overdue
         </button>
+        <select aria-label="Filter by status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+          <option value="">All statuses</option>
+          {visibleLists.map((l) => <option key={l.name} value={l.name}>{l.title}</option>)}
+        </select>
+        <select aria-label="Filter by label" value={labelFilter} onChange={(e) => setLabelFilter(e.target.value)}>
+          <option value="">All labels</option>
+          {[...new Set(board.cards.filter((c) => !c.archived).flatMap((c) => (c.labels || "").split(",").map((x) => x.trim()).filter(Boolean)))].sort().map((x) => <option key={x} value={x}>{x}</option>)}
+        </select>
+        <select aria-label="Filter by priority" value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)}>
+          <option value="">All priorities</option>
+          {["None", "Low", "Medium", "High", "Urgent"].map((x) => <option key={x}>{x}</option>)}
+        </select>
         <span className="card-total">{filtered.length} cards</span>
         {busy && <span className="saving">Saving…</span>}
         <button
@@ -877,9 +898,11 @@ function App() {
       ) : (
         <Timeline
           members={board.members}
+          allCards={board.cards}
+          allLists={board.lists}
           selected={card}
           cards={filtered}
-          lists={visibleLists}
+          lists={visibleLists.filter((l) => !statusFilter || l.name === statusFilter)}
           busy={busy}
           open={openCard}
           create={setComposer}
@@ -1289,7 +1312,7 @@ function CardFace({
     ? new Set(c.references.map((r) => r.name))
     : null;
   const check = c.description
-    ? checklistProgress(
+    ? taskChecklistProgress(
         c.description,
         (id) => {
           const t = cardsById.get(id);
@@ -1300,6 +1323,7 @@ function CardFace({
     : { done: 0, total: 0 };
   return (
     <>
+      <div className="task-badges">{(c.labels || "").split(",").map((x) => x.trim()).filter(Boolean).map((x) => <span className="task-label" key={x}>{x}</span>)}{c.priority && c.priority !== "None" && <span className={`task-priority priority-${c.priority.toLowerCase()}`}>{c.priority}</span>}</div>
       <div className="card-title">{c.title}</div>
       <div className="card-meta">
         {c.due_date && (
@@ -1338,8 +1362,8 @@ function CardFace({
         )}
         {check.total > 0 && (
           <span
-            data-tooltip={`${check.done} of ${check.total} linked cards done`}
-            aria-label={`${check.done} of ${check.total} linked cards done`}
+            data-tooltip={`${check.done} of ${check.total} checklist items done`}
+            aria-label={`${check.done} of ${check.total} checklist items done`}
           >
             <ListChecks size={13} />
             {check.done}/{check.total}
@@ -1509,6 +1533,8 @@ function CardComposer({
     [start, setStart] = useState(seed.start_date || ""),
     [due, setDue] = useState(seed.due_date || seed.start_date || today()),
     [description, setDescription] = useState(""),
+    [labels, setLabels] = useState(""),
+    [priority, setPriority] = useState("None"),
     [selected, setSelected] = useState<string[]>([]),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
@@ -1545,6 +1571,8 @@ function CardComposer({
               start_date: start || null,
               due_date: due || null,
               description,
+              labels,
+              priority,
               assignees: selected,
             });
             close();
@@ -1601,6 +1629,10 @@ function CardComposer({
               setDue(range.due);
             }}
           />
+        </div>
+        <div className="task-metadata-fields">
+          <label>Labels<input aria-label="Task labels" placeholder="e.g. Accounts, ERP" maxLength={500} value={labels} onChange={(e) => setLabels(e.target.value)} /><small>Separate labels with commas</small></label>
+          <label>Priority<select aria-label="Task priority" value={priority} onChange={(e) => setPriority(e.target.value)}>{["None", "Low", "Medium", "High", "Urgent"].map((x) => <option key={x}>{x}</option>)}</select></label>
         </div>
         <label>
           Description
@@ -1952,6 +1984,10 @@ function CardModal({
                     }}
                   />
                 </div>
+                <div className="task-metadata-fields">
+                  <label>Labels<input aria-label="Task labels" value={draft.labels || ""} maxLength={500} placeholder="e.g. Accounts, ERP" onChange={(e) => change("labels", e.target.value)} /><small>Separate labels with commas</small></label>
+                  <label>Priority<select aria-label="Task priority" value={draft.priority || "None"} onChange={(e) => change("priority", e.target.value)}>{["None", "Low", "Medium", "High", "Urgent"].map((x) => <option key={x}>{x}</option>)}</select></label>
+                </div>
                 <div className="section-heading">
                   <Users size={18} />
                   <h3>Members</h3>
@@ -2181,6 +2217,14 @@ function CardModal({
               </div>
             </div>
             <aside className="discussion">
+              <details className="task-activity" open>
+                <summary>Activity <span>{data.activity?.length || 0}</span></summary>
+                <ol>{(data.activity || []).map((event) => <li key={event.name}>
+                  <strong>{board.members.find((m) => m.user === event.user)?.full_name || event.user}</strong>
+                  <p>{event.text}</p>
+                  <time dateTime={event.date}>{event.date.replace("T", " ").split(".")[0]}</time>
+                </li>)}</ol>
+              </details>
               <div className="section-heading">
                 <MessageSquare size={18} />
                 <h3>Comments</h3>
