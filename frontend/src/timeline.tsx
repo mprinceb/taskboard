@@ -377,7 +377,6 @@ export function Timeline(p: Props) {
         >
           <ChevronRight size={18} />
         </button>
-        <span className="timeline-scroll-hint">Scroll grid ↔ · Scroll status column ↕</span>
         <details className="timeline-guide">
           <summary>Guide</summary>
           <div className="timeline-guide-panel">
