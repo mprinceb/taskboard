@@ -701,7 +701,7 @@ function App() {
             onClick={() => setComposer({ list_id: visibleLists[0]?.name })}
           >
             <Plus size={16} />
-            Create card
+            Create task
           </button>
           <div className="avatar-stack">
             {board.members.slice(0, 4).map((m) => (
@@ -876,6 +876,8 @@ function App() {
         </BoardView>
       ) : (
         <Timeline
+          members={board.members}
+          selected={card}
           cards={filtered}
           lists={visibleLists}
           busy={busy}

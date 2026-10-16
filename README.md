@@ -12,6 +12,7 @@ A small, open-source task tracker built as a **Frappe app with a React frontend*
 - Comments, explicit member mentions, and downloadable private attachments on cards or comments.
 - Images, videos, PDF, Word, Excel, text, and archive files. No embedded media/document viewer.
 - Board and week/two-week/month timeline views, search, assignee/overdue filters, and an unscheduled section.
+- Readable timeline bars with full title, assigned owners and dates on hover; neutral charcoal workspace, weekend shading, a today line, sticky calendar/status labels, and a browsable list of tasks outside the visible range. Overdue, completed, blocked-status and selected tasks use distinct accents with icons or labels.
 - Compact timeline lanes: non-overlapping cards share a row; overlapping ranges stack automatically. Drag cards between dates/lists, resize either edge, or drag unscheduled cards onto dates. Changes save immediately.
 - Select empty timeline dates to create a scheduled card. Use Create card for title, list, dates, description and members, or quick-add consecutive cards with Enter on the board.
 - Board drag overlays, insertion markers, edge scrolling, and dedicated keyboard/touch drag handles. Escape cancels dragging; failed saves restore the previous position or dates.

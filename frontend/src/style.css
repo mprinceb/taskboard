@@ -2762,3 +2762,78 @@ progress {
   top: auto;
   bottom: calc(100% + 4px);
 }
+
+/* Focused timeline: neutral canvas and semantic accents. */
+:root { --board-gradient: linear-gradient(#181a1f, #181a1f); }
+.board-toolbar { padding: 12px 20px 10px; background: #202228; }
+.board-actions { gap: 12px; }
+.create-card-button.primary { background: #b7a2f6; color: #211536; }
+.create-card-button.primary:hover { background: #c8b8fa; }
+.avatar-stack .avatar { border-color: #30323a; }
+.filterbar { padding: 8px 20px 10px; background: #202228; border-top: 1px solid #ffffff09; gap: 8px; flex-wrap: wrap; }
+.filterbar .search-box { flex: 0 1 300px; }
+.filterbar .search-box input { width: 100%; min-width: 90px; }
+.filterbar .filter-chip, .filterbar select { min-height: 34px; }
+.timeline-wrap { background: #202228; margin-top: 12px; border: 1px solid #383b44; }
+.interactive-timeline .timeline-tools { padding: 10px 14px; flex-wrap: nowrap; }
+.interactive-timeline .timeline-tools select { margin-left: auto; }
+.timeline-hint { padding: 6px 14px; font-size: 12px; }
+.timeline-legend { display: flex; flex-wrap: wrap; gap: 16px; padding: 8px 14px 0; font-size: 12px; color: #c7cad2; }
+.timeline-legend span { display: inline-flex; gap: 5px; align-items: center; }
+.timeline-legend span:first-child { color: #ffbcac; }
+.timeline-legend .selected-key::before { content: ""; width: 9px; height: 9px; border: 2px solid #c1abff; border-radius: 2px; }
+.interactive-timeline .timeline-head { background: #282b33; }
+.interactive-timeline .timeline-head > div:first-child { background: #282b33; padding: 17px 12px; }
+.date-grid > span { color: #e2e4eb; min-height: 52px; }
+.date-grid small { font-size: 11px; color: #b8bcc7; }
+.interactive-timeline .date-grid .weekend { background: #ffffff06; }
+.interactive-timeline .date-grid .today { background: #b7a2f61c; color: #d7c9ff; box-shadow: inset 0 -2px #b7a2f6; }
+.timeline-lane-group { min-height: 44px; }
+.timeline-list-label { padding: 6px 8px; background: #24262d; display: block; }
+.timeline-label-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px; position: sticky; top: 58px; }
+.lane-toggle { gap: 6px; padding: 4px 2px; }
+.lane-toggle strong { font-size: 13px; color: #eceef4; }
+.lane-toggle > span { font-size: 12px; }
+.timeline-list-label .outside-period { padding: 4px 5px; color: #cab8ff; font-size: 12px; line-height: 1.35; border-radius: 4px; text-align: left; white-space: normal; justify-content: space-between; }
+.timeline-list-label .outside-period:hover { background: #b7a2f61a; text-decoration: underline; }
+.timeline-lane-content { position: relative; }
+.timeline-calendar-shading { position: absolute; inset: 0; display: grid; pointer-events: none; }
+.timeline-calendar-shading > span { border-right: 1px solid #ffffff09; position: relative; }
+.timeline-calendar-shading .weekend { background: #ffffff04; }
+.timeline-calendar-shading .today-column::after { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; background: #b7a2f699; }
+.timeline-packed-row { min-height: 46px; }
+.interactive-timeline .timeline-track { background-image: none; }
+.timeline-lane-content .timeline-create-track { height: 22px; }
+.lane-create-hint { padding: 3px 10px; font-size: 11px; line-height: 16px; opacity: 0; }
+.timeline-create-track:focus-visible .lane-create-hint { opacity: 1; }
+.interactive-timeline .timeline-bar { top: 5px; height: 36px; min-width: 0; z-index: 1; background: #373d49; color: #f3f5fa; border: 1px solid #697385; border-radius: 6px; box-shadow: 0 1px 2px #0003; }
+.interactive-timeline .timeline-bar:hover { background: #454d5b; border-color: #a1abba; z-index: 2; }
+.interactive-timeline .range-body { padding: 0 5px; gap: 5px; font-size: 13px; font-weight: 500; line-height: 20px; }
+.timeline-task-title { display: block; min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.task-state-icon { flex: 0 0 auto; }
+.range-handle { min-width: 6px; width: 6px; }
+.range-handle::after { height: 12px; top: 10px; left: 2px; opacity: 0.25; }
+.interactive-timeline .timeline-bar.done { background: #293a34; color: #d3e8dc; border-color: #526e60; }
+.interactive-timeline .timeline-bar.overdue { background: #4c302d; color: #ffe1d8; border-color: #d98f7e; }
+.interactive-timeline .timeline-bar.blocked { background: #483d28; color: #ffe8b1; border-color: #d2ae61; }
+.interactive-timeline .timeline-bar.selected, .interactive-timeline .timeline-bar:focus-within { outline: 2px solid #c1abff; outline-offset: 1px; z-index: 3; }
+.interactive-timeline .timeline-bar.selected::after { content: "Selected"; position: absolute; bottom: 100%; right: 0; background: #c1abff; color: #211536; font-size: 10px; padding: 2px 4px; border-radius: 3px; }
+.app-tooltip { max-width: min(440px, calc(100vw - 24px)); white-space: pre-line; text-align: left; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.outside-tasks { margin: 10px 14px; padding: 12px; border: 1px solid #6e608e; border-radius: 7px; background: #282b33; max-height: 260px; overflow: auto; flex-shrink: 0; }
+.outside-tasks header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.outside-tasks h3 { font-size: 14px; margin: 0; }
+.outside-tasks ul { margin: 8px 0 0; padding: 0; list-style: none; }
+.outside-tasks li { display: grid; grid-template-columns: minmax(160px, 1fr) auto auto; gap: 12px; align-items: center; border-top: 1px solid #ffffff12; padding: 6px 0; }
+.outside-tasks li > button:first-child { background: transparent; text-align: left; justify-content: flex-start; color: #f1f2f7; }
+.outside-tasks li > span { font-size: 12px; color: #bfc3ce; }
+.outside-tasks li > button:last-child { font-size: 12px; color: #d5c5ff; }
+@media (max-width: 700px) {
+  .board-toolbar { flex-wrap: wrap; padding: 10px 12px; }
+  .board-heading { flex-wrap: wrap; gap: 10px; }
+  .filterbar { padding: 8px 12px; }
+  .filterbar .search-box { flex: 1 1 180px; }
+  .timeline-tools h2 { font-size: 14px; margin-right: 0; }
+  .timeline-legend { gap: 10px; }
+  .outside-tasks li { grid-template-columns: 1fr; gap: 4px; }
+  .outside-tasks li > span { padding-left: 11px; }
+}
