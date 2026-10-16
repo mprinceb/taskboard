@@ -2866,3 +2866,51 @@ progress {
 .task-activity p { margin: 4px 0; }
 .task-activity time { color: var(--muted); font-size: 11px; }
 @media (max-width: 540px) { .task-metadata-fields { grid-template-columns: 1fr; gap: 0; } }
+
+/* Status-tinted task cards, with people represented by compact avatars. */
+.timeline-lane-group { background: #1e222b; }
+.timeline-list-label { background: #212630; }
+.lane-toggle strong::before { content: ""; display: inline-block; width: 7px; height: 7px; margin: 0 7px 1px 0; border-radius: 50%; background: var(--lane-accent); box-shadow: 0 0 9px color-mix(in srgb, var(--lane-accent) 25%, transparent); }
+.timeline-lane-group .lane-toggle > span { background: #ffffff09; padding: 1px 6px; border-radius: 8px; }
+.timeline-list-label .outside-period { color: #abb8ce; }
+.timeline-list-label .outside-period:hover { color: var(--lane-accent); }
+.interactive-timeline .timeline-bar {
+  height: 58px; border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--lane-accent) 32%, #343b49);
+  background: linear-gradient(115deg, color-mix(in srgb, var(--lane-accent) 19%, #242936), color-mix(in srgb, var(--lane-accent) 9%, #242936));
+  box-shadow: inset 3px 0 var(--lane-accent), 0 3px 7px #00000024;
+}
+.interactive-timeline .timeline-bar:hover {
+  border-color: var(--lane-accent); background: color-mix(in srgb, var(--lane-accent) 23%, #242936);
+  box-shadow: inset 3px 0 var(--lane-accent), 0 3px 12px #0004;
+}
+.interactive-timeline .timeline-bar.done { --lane-accent: #6ee7b7; color: #d9f7e9; }
+.interactive-timeline .timeline-bar.overdue { --lane-accent: #fb927d; color: #ffe7df; }
+.interactive-timeline .timeline-bar.blocked { --lane-accent: #f6bc65; color: #fff0cb; }
+.timeline-packed-row { min-height: 68px; }
+.range-handle::after { top: 22px; }
+.interactive-timeline .range-body { padding: 3px 4px; gap: 4px; }
+.timeline-task-copy { gap: 6px; }
+.timeline-task-title { font-size: 13px; font-weight: 600; color: #f5f7fc; }
+.timeline-card-footer { display: flex; align-items: center; gap: 5px; min-width: 0; height: 23px; }
+.timeline-card-footer .timeline-task-meta { flex: 1; min-width: 0; gap: 6px; }
+.timeline-card-footer .timeline-due-chip { display: inline-flex; align-items: center; gap: 3px; color: #d2daea; font-size: 10px; line-height: 18px; }
+.timeline-checklist { display: inline-flex; gap: 3px; align-items: center; }
+.timeline-card-avatars { display: inline-flex; align-items: center; flex-shrink: 0; padding-left: 2px; }
+.timeline-assignee-avatar, .timeline-assignee-overflow {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 23px; height: 23px; flex-shrink: 0; border-radius: 50%;
+  color: #202a3c; font-size: 9px; font-weight: 700; line-height: 1;
+  border: 2px solid #28303e; box-shadow: 0 1px 3px #0004;
+}
+.timeline-assignee-avatar + .timeline-assignee-avatar, .timeline-assignee-overflow { margin-left: -5px; }
+.timeline-assignee-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+.timeline-assignee-avatar.unassigned { background: #ffffff0a; color: #a5b2c8; border: 1px dashed #8c9db466; box-shadow: none; }
+.timeline-assignee-overflow { background: #43516a; color: #edf1fb; }
+.timeline-assignee-avatar:hover, .timeline-assignee-overflow:hover { z-index: 2; box-shadow: 0 0 0 2px #ffffff55; }
+.interactive-timeline .timeline-bar .task-state-icon { width: 12px; }
+.timeline-legend { gap: 18px; }
+.timeline-scroll { scrollbar-color: #566278 #212630; }
+.timeline-head .date-grid > span { background: #252b36; }
+.interactive-timeline .date-grid .weekend { background: #2b303d; }
+.timeline-calendar-shading .weekend { background: #8ca5d109; }

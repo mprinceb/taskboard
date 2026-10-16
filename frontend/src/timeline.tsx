@@ -16,7 +16,10 @@ import {
   Ban,
   X,
   ArrowUpRight,
+  UserRound,
+  ListChecks,
 } from "lucide-react";
+import { AssigneeAvatar } from "./assignee-avatar";
 import { taskChecklistProgress } from "./cardrefs";
 import type { Card, Column, Member } from "./api";
 import {
@@ -439,6 +442,7 @@ export function Timeline(p: Props) {
             return (
               <section
                 key={list.name}
+                style={{ "--lane-accent": list.is_done ? "#6ee7b7" : /blocked/i.test(list.title) ? "#fbbf72" : /review/i.test(list.title) ? "#f9c56b" : /ongoing|progress/i.test(list.title) ? "#bb9bff" : /discussion/i.test(list.title) ? "#f49ac2" : /todo|to do/i.test(list.title) ? "#7fb5ff" : "#8eaccb" } as React.CSSProperties}
                 data-timeline-list={list.name}
                 className={
                   "timeline-lane-group" +
@@ -570,12 +574,18 @@ export function Timeline(p: Props) {
                                   {c.completed ? <Check className="task-state-icon" size={14} aria-label="Completed" /> : blocked ? <Ban className="task-state-icon" size={14} aria-label="Blocked" /> : overdue ? <AlertTriangle className="task-state-icon" size={14} aria-label="Overdue" /> : null}
                                   <span className="timeline-task-copy">
                                     <span className="timeline-task-title">{c.title}</span>
-                                    <span className="timeline-task-meta">
-                                      {c.priority && c.priority !== "None" && <span className={`task-priority priority-${c.priority.toLowerCase()}`}>{c.priority}</span>}
-                                      <span>{owners}</span>
-                                      {labels.map((x) => <span className="task-label" key={x}>{x}</span>)}
-                                      <span>Due {c.due_date ? label(c.due_date) : "not set"}</span>
-                                      {progress.total > 0 && <span aria-label={`${progress.done} of ${progress.total} checklist items complete`}>☑ {progress.done}/{progress.total}</span>}
+                                    <span className="timeline-card-footer">
+                                      <span className="timeline-task-meta">
+                                        {c.due_date && <span className="timeline-due-chip"><CalendarDays size={11} />{label(c.due_date)}</span>}
+                                        {c.priority && c.priority !== "None" && <span className={`task-priority priority-${c.priority.toLowerCase()}`}>{c.priority}</span>}
+                                        {progress.total > 0 && <span className="timeline-checklist" aria-label={`${progress.done} of ${progress.total} checklist items complete`}><ListChecks size={12} />{progress.done}/{progress.total}</span>}
+                                        {labels.map((x) => <span className="task-label" key={x}>{x}</span>)}
+                                      </span>
+                                      <span className="timeline-card-avatars">
+                                        {c.assignees.slice(0, 2).map((user) => <AssigneeAvatar key={user} user={user} members={p.members} />)}
+                                        {c.assignees.length > 2 && <span className="timeline-assignee-overflow" data-tooltip={c.assignees.slice(2).map((user) => p.members.find((m) => m.user === user)?.full_name || user).join(", ")}>+{c.assignees.length - 2}</span>}
+                                        {!c.assignees.length && <span className="timeline-assignee-avatar unassigned" role="img" aria-label="Unassigned" data-tooltip="Unassigned"><UserRound size={13} /></span>}
+                                      </span>
                                     </span>
                                   </span>
                                 </button>
