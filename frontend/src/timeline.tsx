@@ -1,6 +1,7 @@
 import {
   PointerEvent as ReactPointerEvent,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -11,8 +12,16 @@ import {
   Plus,
   GripVertical,
   Check,
+  AlertTriangle,
+  Ban,
+  X,
+  ArrowUpRight,
+  UserRound,
+  ListChecks,
 } from "lucide-react";
-import type { Card, Column } from "./api";
+import { AssigneeAvatar } from "./assignee-avatar";
+import { taskChecklistProgress } from "./cardrefs";
+import type { Card, Column, Member } from "./api";
 import {
   cardRange,
   dateNumber,
@@ -29,8 +38,12 @@ export type NewCardSeed = {
 };
 type Props = {
   cards: Card[];
+  allCards: Card[];
+  allLists: Column[];
   lists: Column[];
   busy: boolean;
+  members: Member[];
+  selected: string | null;
   open: (id: string) => void;
   create: (seed: NewCardSeed) => void;
   save: (card: Card, patch: Partial<Card>) => Promise<void>;
@@ -60,12 +73,24 @@ const label = (d: string) =>
     day: "numeric",
   });
 export function Timeline(p: Props) {
+  const checklistByCard = useMemo(() => {
+    const cards = new Map(p.allCards.map((c) => [c.name, c]));
+    const doneLists = new Set(p.allLists.filter((l) => l.is_done).map((l) => l.name));
+    return new Map(p.allCards.map((c) => {
+      const known = new Set((c.references || []).map((r) => r.name));
+      return [c.name, taskChecklistProgress(c.description || "", (id) => {
+        const linked = cards.get(id);
+        return !!linked && (!!linked.completed || doneLists.has(linked.list_id));
+      }, (id) => known.has(id))];
+    }));
+  }, [p.allCards, p.allLists]);
   const [scale, setScale] = useState(14),
     [anchor, setAnchor] = useState(localToday()),
     [preview, setPreview] = useState<Preview | null>(null),
     [active, setActive] = useState<Gesture | null>(null);
   const [collapsed, setCollapsed] = useState<string[]>([]),
     [status, setStatus] = useState("");
+  const [outsideList, setOutsideList] = useState<{ title: string; cards: Card[] } | null>(null);
   const scroll = useRef<HTMLDivElement>(null),
     dateHead = useRef<HTMLDivElement>(null),
     gesture = useRef<Gesture | null>(null),
@@ -73,7 +98,23 @@ export function Timeline(p: Props) {
     lastPoint = useRef({ x: 0, y: 0 }),
     suppress = useRef(false);
   const weekday = new Date(anchor + "T12:00:00").getDay();
-  const start = shiftDate(anchor, -((weekday + 6) % 7));
+  useEffect(() => {
+    const element = scroll.current;
+    if (!element) return;
+    const wheel = (event: WheelEvent) => {
+      // Leave ordinary vertical wheels and native horizontal trackpad gestures
+      // alone. Only translate Shift+vertical wheel into horizontal movement.
+      if (!event.shiftKey || event.ctrlKey || event.metaKey || gesture.current) return;
+      if (event.deltaX || !event.deltaY) return;
+      if (element.scrollWidth <= element.clientWidth + 1) return;
+      const delta = event.deltaY * (event.deltaMode === 1 ? 20 : event.deltaMode === 2 ? element.clientWidth : 1);
+      event.preventDefault();
+      element.scrollLeft += delta;
+    };
+    element.addEventListener("wheel", wheel, { passive: false });
+    return () => element.removeEventListener("wheel", wheel);
+  }, []);
+  const start = shiftDate(anchor, scale === 7 ? -1 : -((weekday + 6) % 7));
   const dates = Array.from({ length: scale }, (_, i) => shiftDate(start, i));
   const dayAt = (x: number) => {
     const r = dateHead.current!.getBoundingClientRect();
@@ -325,20 +366,21 @@ export function Timeline(p: Props) {
         >
           <ChevronRight size={18} />
         </button>
-        <button
-          className="primary timeline-create"
-          disabled={p.busy || !p.lists.length}
-          onClick={() =>
-            p.create({
-              list_id: p.lists[0]?.name,
-              start_date: anchor,
-              due_date: anchor,
-            })
-          }
-        >
-          <Plus size={15} />
-          Add card
-        </button>
+        <details className="timeline-guide">
+          <summary>Guide</summary>
+          <div className="timeline-guide-panel">
+      <div className="timeline-legend" aria-label="Task status legend">
+        <span><AlertTriangle size={13} /> Overdue</span>
+        <span><Ban size={13} /> Blocked status</span>
+        <span><Check size={13} /> Completed</span>
+        <span className="selected-key">Selected / focused</span>
+      </div>
+      <div className="timeline-hint">
+        Drag cards to reschedule · Drag either edge to resize · Select empty
+        dates to create a card
+      </div>
+          </div>
+        </details>
         <select
           aria-label="Timeline scale"
           value={scale}
@@ -350,10 +392,18 @@ export function Timeline(p: Props) {
           <option value={31}>Month</option>
         </select>
       </div>
-      <div className="timeline-hint">
-        Drag cards to reschedule · Drag either edge to resize · Select empty
-        dates to create a card
-      </div>
+      {outsideList && (
+        <section className="outside-tasks" aria-label={`${outsideList.title} tasks outside range`}>
+          <header><h3>{outsideList.title} · {outsideList.cards.length} tasks outside range</h3>
+            <button className="icon" aria-label="Close outside-range tasks" onClick={() => setOutsideList(null)}><X size={16} /></button>
+          </header>
+          <ul>{outsideList.cards.map((c) => <li key={c.name}>
+            <button onClick={() => p.open(c.name)}>{c.title}</button>
+            <span>{c.start_date || "No start"} – {c.due_date || "No due date"}</span>
+            <button onClick={() => { setAnchor(cardRange(c, start).start); setOutsideList(null); setCollapsed(collapsed.filter((id) => id !== c.list_id)); }} aria-label={`Show ${c.title} on timeline`}>Show on timeline <ArrowUpRight size={13} /></button>
+          </li>)}</ul>
+        </section>
+      )}
       <div className="sr-only" aria-live="polite">
         {status}
       </div>
@@ -365,15 +415,15 @@ export function Timeline(p: Props) {
           {p.busy ? " · Saving…" : ""}
         </div>
       )}
-      <div ref={scroll} className="timeline-scroll">
+      <div ref={scroll} className="timeline-scroll" tabIndex={0} role="region" aria-label="Scrollable task timeline">
         <div
           className="timeline-grid"
           style={{
-            minWidth: `calc(var(--timeline-sidebar) + ${scale * 56}px)`,
+            minWidth: `calc(var(--timeline-sidebar) + ${scale * 176}px)`,
           }}
         >
           <div className="timeline-head">
-            <div>Cards by list</div>
+            <div>Status / tasks</div>
             <div
               ref={dateHead}
               className="date-grid"
@@ -413,6 +463,7 @@ export function Timeline(p: Props) {
             return (
               <section
                 key={list.name}
+                style={{ "--lane-accent": list.is_done ? "#6ee7b7" : /blocked/i.test(list.title) ? "#fbbf72" : /review/i.test(list.title) ? "#f9c56b" : /ongoing|progress/i.test(list.title) ? "#bb9bff" : /discussion/i.test(list.title) ? "#f49ac2" : /todo|to do/i.test(list.title) ? "#7fb5ff" : "#8eaccb" } as React.CSSProperties}
                 data-timeline-list={list.name}
                 className={
                   "timeline-lane-group" +
@@ -422,6 +473,7 @@ export function Timeline(p: Props) {
                 }
               >
                 <div className="timeline-list-label">
+                  <div className="timeline-label-controls">
                   <button
                     className="lane-toggle"
                     aria-label={(folded ? "Expand " : "Collapse ") + list.title}
@@ -458,16 +510,24 @@ export function Timeline(p: Props) {
                   {outside > 0 && (
                     <button
                       className="outside-period"
-                      onClick={() => {
-                        const c = all.find((c) => !visible.includes(c));
-                        if (c) setAnchor(cardRange(c, start).start);
-                      }}
+                      aria-expanded={outsideList?.title === list.title}
+                      onClick={() => setOutsideList({
+                        title: list.title,
+                        cards: all.filter((c) => !visible.includes(c)),
+                      })}
                     >
-                      {outside} outside this period →
+                      View {outside} tasks outside range <ArrowUpRight size={12} />
                     </button>
                   )}
+                  </div>
                 </div>
                 <div className="timeline-lane-content">
+                  <div className="timeline-calendar-shading" aria-hidden="true" style={{ gridTemplateColumns: `repeat(${scale}, 1fr)` }}>
+                    {dates.map((d) => <span key={d} className={[
+                      [0, 6].includes(new Date(d + "T12:00:00").getDay()) ? "weekend" : "",
+                      d === localToday() ? "today-column" : "",
+                    ].join(" ")} />)}
+                  </div>
                   {!folded && (
                     <>
                       {packed.map((row, index) => (
@@ -490,16 +550,19 @@ export function Timeline(p: Props) {
                                 : original;
                             const style = barStyle(range.start, range.end);
                             if (!style) return null;
+                            const overdue = !c.completed && !!c.due_date && c.due_date < localToday();
+                            const blocked = !c.completed && /\bblocked\b/i.test(list.title);
+                            const owners = c.assignees.map((user) => p.members.find((m) => m.user === user)?.full_name || user).join(", ") || "Unassigned";
+                            const progress = checklistByCard.get(c.name) || { done: 0, total: 0 };
+                            const labels = (c.labels || "").split(",").map((x) => x.trim()).filter(Boolean);
+                            const state = c.completed ? "Completed" : blocked ? "Blocked" : overdue ? "Overdue" : "Scheduled";
                             return (
                               <div
                                 key={c.name}
                                 className={
                                   "timeline-bar " +
-                                  (c.completed
-                                    ? "done"
-                                    : c.due_date && c.due_date < localToday()
-                                      ? "overdue"
-                                      : "") +
+                                  (c.completed ? "done" : blocked ? "blocked" : overdue ? "overdue" : "") +
+                                  (p.selected === c.name ? " selected" : "") +
                                   (changing ? " adjusting" : "")
                                 }
                                 style={style}
@@ -518,8 +581,8 @@ export function Timeline(p: Props) {
                                 )}
                                 <button
                                   className="range-body"
-                                  aria-label={"Schedule " + c.title}
-                                  data-tooltip={`${c.title}: ${label(range.start)} – ${label(range.end)}. Drag to move; arrow keys move one day, Shift moves one week.`}
+                                  aria-label={`${c.title} · ${state} · Owner: ${owners} · ${c.start_date || "No start date"} to ${c.due_date || "No due date"}`}
+                                  data-tooltip={`${c.title}\nOwner: ${owners}\nStart: ${c.start_date || "Not set"} · Due: ${c.due_date || "Not set"}\nPriority: ${c.priority || "None"} · Labels: ${labels.join(", ") || "None"}${progress.total ? ` · Checklist: ${progress.done}/${progress.total}` : ""}\n${state} · Drag to move; arrow keys adjust dates.`}
                                   disabled={p.busy}
                                   onPointerDown={(e) =>
                                     begin(e, "move", list.name, c)
@@ -529,7 +592,23 @@ export function Timeline(p: Props) {
                                     if (!suppress.current) p.open(c.name);
                                   }}
                                 >
-                                  {c.title}
+                                  {c.completed ? <Check className="task-state-icon" size={14} aria-label="Completed" /> : blocked ? <Ban className="task-state-icon" size={14} aria-label="Blocked" /> : overdue ? <AlertTriangle className="task-state-icon" size={14} aria-label="Overdue" /> : null}
+                                  <span className="timeline-task-copy">
+                                    <span className="timeline-task-title">{c.title}</span>
+                                    <span className="timeline-card-footer">
+                                      <span className="timeline-task-meta">
+                                        {c.due_date && <span className={"timeline-due-chip " + (c.completed ? "complete" : overdue ? "late" : c.due_date === localToday() ? "due-today" : "")}><CalendarDays size={11} />{label(c.due_date)}</span>}
+                                        {c.priority && c.priority !== "None" && <span className={`task-priority priority-${c.priority.toLowerCase()}`}>{c.priority}</span>}
+                                        {progress.total > 0 && <span className="timeline-checklist" aria-label={`${progress.done} of ${progress.total} checklist items complete`}><ListChecks size={12} />{progress.done}/{progress.total}</span>}
+                                        {labels.map((x) => <span className="task-label" key={x}>{x}</span>)}
+                                      </span>
+                                      <span className="timeline-card-avatars">
+                                        {c.assignees.slice(0, 2).map((user) => <AssigneeAvatar key={user} user={user} members={p.members} />)}
+                                        {c.assignees.length > 2 && <span className="timeline-assignee-overflow" data-tooltip={c.assignees.slice(2).map((user) => p.members.find((m) => m.user === user)?.full_name || user).join(", ")}>+{c.assignees.length - 2}</span>}
+                                        {!c.assignees.length && <span className="timeline-assignee-avatar unassigned" role="img" aria-label="Unassigned" data-tooltip="Unassigned"><UserRound size={13} /></span>}
+                                      </span>
+                                    </span>
+                                  </span>
                                 </button>
                                 {original.end <= dates[scale - 1] && (
                                   <button
