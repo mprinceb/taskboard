@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { isImageName, safeImageSrc } from "./images";
 import {
   api,
   get,
@@ -229,12 +230,66 @@ function Md({
                 {children}
               </a>
             ),
-          img: () => null,
+          img: ({ src, alt }) => {
+            const safe = safeImageSrc(src);
+            return safe ? (
+              <ImageThumb src={safe} alt={alt || "Image"} />
+            ) : (
+              <span className="img-blocked">[image not shown: {alt || "unsupported source"}]</span>
+            );
+          },
         }}
       >
         {source}
       </Markdown>
     </div>
+  );
+}
+function ImageThumb({
+  src,
+  alt,
+  className = "md-image",
+}: {
+  src: string;
+  alt: string;
+  className?: string;
+}) {
+  const [big, setBig] = useState(false);
+  useEffect(() => {
+    if (!big) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setBig(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [big]);
+  return (
+    <>
+      <button
+        type="button"
+        className={"image-btn " + className}
+        onClick={() => setBig(true)}
+        aria-label={"Enlarge " + alt}
+      >
+        <img src={src} alt={alt} loading="lazy" referrerPolicy="no-referrer" />
+      </button>
+      {big && (
+        <div
+          className="lightbox"
+          role="dialog"
+          aria-label={alt}
+          onClick={() => setBig(false)}
+        >
+          <img src={src} alt={alt} referrerPolicy="no-referrer" />
+          <a
+            href={src}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+          >
+            Open original
+          </a>
+        </div>
+      )}
+    </>
   );
 }
 function CardPicker({
@@ -2159,7 +2214,7 @@ function CardModal({
                 </label>
               </div>
               <p className="attachment-help">
-                Files up to {board.settings.max_upload_mb} MB · Download to open
+                Files up to {board.settings.max_upload_mb} MB · Click an image to enlarge
               </p>
               {progress !== null && (
                 <div className="upload-progress">
@@ -2430,7 +2485,15 @@ function FileRow({
   const ext = file.file_name.split(".").pop()?.slice(0, 5).toUpperCase();
   return (
     <div className="file-row">
-      <div className="file-icon">{ext}</div>
+      {isImageName(file.file_name) && safeImageSrc(file.file_url) ? (
+        <ImageThumb
+          src={file.file_url}
+          alt={file.file_name}
+          className="file-thumb"
+        />
+      ) : (
+        <div className="file-icon">{ext}</div>
+      )}
       <div>
         <a href={file.file_url} download>
           {file.file_name}

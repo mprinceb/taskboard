@@ -2972,3 +2972,11 @@ progress {
 .date-grid > span { min-height: 52px; }
 .interactive-timeline .timeline-head > div:first-child { padding: 16px; }
 .timeline-label-controls { top: 60px; }
+.image-btn { display: inline-block; padding: 0; border: 0; background: none; cursor: zoom-in; max-width: 100%; }
+.md-image img { max-width: 100%; max-height: 360px; border-radius: 6px; display: block; }
+.file-thumb { flex: none; }
+.file-thumb img { width: 44px; height: 44px; object-fit: cover; border-radius: 4px; display: block; }
+.img-blocked { color: var(--muted); font-size: 12px; }
+.lightbox { position: fixed; inset: 0; z-index: 1000; background: rgba(0, 0, 0, 0.85); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; cursor: zoom-out; }
+.lightbox img { max-width: 94vw; max-height: 86vh; object-fit: contain; }
+.lightbox a { color: #fff; font-size: 13px; }
