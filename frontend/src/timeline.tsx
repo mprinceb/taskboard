@@ -84,7 +84,7 @@ export function Timeline(p: Props) {
       }, (id) => known.has(id))];
     }));
   }, [p.allCards, p.allLists]);
-  const [scale, setScale] = useState(14),
+  const [scale, setScale] = useState(7),
     [anchor, setAnchor] = useState(localToday()),
     [preview, setPreview] = useState<Preview | null>(null),
     [active, setActive] = useState<Gesture | null>(null);
@@ -98,7 +98,7 @@ export function Timeline(p: Props) {
     lastPoint = useRef({ x: 0, y: 0 }),
     suppress = useRef(false);
   const weekday = new Date(anchor + "T12:00:00").getDay();
-  const start = shiftDate(anchor, -((weekday + 6) % 7));
+  const start = shiftDate(anchor, scale === 7 ? -1 : -((weekday + 6) % 7));
   const dates = Array.from({ length: scale }, (_, i) => shiftDate(start, i));
   const dayAt = (x: number) => {
     const r = dateHead.current!.getBoundingClientRect();
@@ -350,6 +350,21 @@ export function Timeline(p: Props) {
         >
           <ChevronRight size={18} />
         </button>
+        <details className="timeline-guide">
+          <summary>Guide</summary>
+          <div className="timeline-guide-panel">
+      <div className="timeline-legend" aria-label="Task status legend">
+        <span><AlertTriangle size={13} /> Overdue</span>
+        <span><Ban size={13} /> Blocked status</span>
+        <span><Check size={13} /> Completed</span>
+        <span className="selected-key">Selected / focused</span>
+      </div>
+      <div className="timeline-hint">
+        Drag cards to reschedule · Drag either edge to resize · Select empty
+        dates to create a card
+      </div>
+          </div>
+        </details>
         <select
           aria-label="Timeline scale"
           value={scale}
@@ -360,12 +375,6 @@ export function Timeline(p: Props) {
           <option value={14}>Two weeks</option>
           <option value={31}>Month</option>
         </select>
-      </div>
-      <div className="timeline-legend" aria-label="Task status legend">
-        <span><AlertTriangle size={13} /> Overdue</span>
-        <span><Ban size={13} /> Blocked status</span>
-        <span><Check size={13} /> Completed</span>
-        <span className="selected-key">Selected / focused</span>
       </div>
       {outsideList && (
         <section className="outside-tasks" aria-label={`${outsideList.title} tasks outside range`}>
@@ -379,10 +388,6 @@ export function Timeline(p: Props) {
           </li>)}</ul>
         </section>
       )}
-      <div className="timeline-hint">
-        Drag cards to reschedule · Drag either edge to resize · Select empty
-        dates to create a card
-      </div>
       <div className="sr-only" aria-live="polite">
         {status}
       </div>
@@ -398,7 +403,7 @@ export function Timeline(p: Props) {
         <div
           className="timeline-grid"
           style={{
-            minWidth: `calc(var(--timeline-sidebar) + ${scale * 80}px)`,
+            minWidth: `calc(var(--timeline-sidebar) + ${scale * 176}px)`,
           }}
         >
           <div className="timeline-head">
@@ -576,7 +581,7 @@ export function Timeline(p: Props) {
                                     <span className="timeline-task-title">{c.title}</span>
                                     <span className="timeline-card-footer">
                                       <span className="timeline-task-meta">
-                                        {c.due_date && <span className="timeline-due-chip"><CalendarDays size={11} />{label(c.due_date)}</span>}
+                                        {c.due_date && <span className={"timeline-due-chip " + (c.completed ? "complete" : overdue ? "late" : c.due_date === localToday() ? "due-today" : "")}><CalendarDays size={11} />{label(c.due_date)}</span>}
                                         {c.priority && c.priority !== "None" && <span className={`task-priority priority-${c.priority.toLowerCase()}`}>{c.priority}</span>}
                                         {progress.total > 0 && <span className="timeline-checklist" aria-label={`${progress.done} of ${progress.total} checklist items complete`}><ListChecks size={12} />{progress.done}/{progress.total}</span>}
                                         {labels.map((x) => <span className="task-label" key={x}>{x}</span>)}
