@@ -2963,6 +2963,8 @@ progress {
 
 /* Keep the working grid close to the toolbar; help stays available on demand. */
 .timeline-guide { margin-left: auto; position: relative; }
+.timeline-scroll-hint { font-size: 12px; color: var(--muted); margin-left: 10px; }
+@media (max-width: 700px) { .timeline-scroll-hint { display: none; } }
 .timeline-guide summary { color: var(--muted); cursor: pointer; font-size: 13px; padding: 8px 10px; }
 .timeline-guide-panel { position: absolute; top: 100%; right: 0; width: min(360px, 80vw); padding: 8px; z-index: 20; background: #282a2e; border: 1px solid #52565e; border-radius: 6px; box-shadow: 0 8px 24px #0006; }
 .timeline-guide-panel .timeline-legend { gap: 12px; }

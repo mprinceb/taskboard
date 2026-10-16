@@ -84,7 +84,7 @@ export function Timeline(p: Props) {
       }, (id) => known.has(id))];
     }));
   }, [p.allCards, p.allLists]);
-  const [scale, setScale] = useState(7),
+  const [scale, setScale] = useState(14),
     [anchor, setAnchor] = useState(localToday()),
     [preview, setPreview] = useState<Preview | null>(null),
     [active, setActive] = useState<Gesture | null>(null);
@@ -98,6 +98,33 @@ export function Timeline(p: Props) {
     lastPoint = useRef({ x: 0, y: 0 }),
     suppress = useRef(false);
   const weekday = new Date(anchor + "T12:00:00").getDay();
+  useEffect(() => {
+    const element = scroll.current;
+    if (!element) return;
+    let lastDateStep = 0;
+    const wheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.metaKey || gesture.current) return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest(".timeline-list-label")) return;
+      // Keep native horizontal trackpad gestures. Translate a mouse wheel over
+      // the date grid; the status column remains the vertical scrolling area.
+      if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+      if (!event.deltaY) return;
+      const delta = event.deltaY * (event.deltaMode === 1 ? 20 : event.deltaMode === 2 ? element.clientWidth : 1);
+      if (element.scrollWidth > element.clientWidth + 1) {
+        event.preventDefault();
+        element.scrollLeft += delta;
+      } else if (target?.closest(".date-grid")) {
+        event.preventDefault();
+        if (event.timeStamp - lastDateStep > 120) {
+          lastDateStep = event.timeStamp;
+          setAnchor((date) => shiftDate(date, Math.sign(delta)));
+        }
+      }
+    };
+    element.addEventListener("wheel", wheel, { passive: false });
+    return () => element.removeEventListener("wheel", wheel);
+  }, []);
   const start = shiftDate(anchor, scale === 7 ? -1 : -((weekday + 6) % 7));
   const dates = Array.from({ length: scale }, (_, i) => shiftDate(start, i));
   const dayAt = (x: number) => {
@@ -350,6 +377,7 @@ export function Timeline(p: Props) {
         >
           <ChevronRight size={18} />
         </button>
+        <span className="timeline-scroll-hint">Scroll grid ↔ · Scroll status column ↕</span>
         <details className="timeline-guide">
           <summary>Guide</summary>
           <div className="timeline-guide-panel">
