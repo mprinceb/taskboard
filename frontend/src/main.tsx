@@ -45,9 +45,11 @@ import {
   imageMarkdown,
   insertSnippet,
   isImageName,
+  clipboardImageCandidates,
+  clipboardImageProblem,
   pastedImageName,
-  pastedImages,
   safeImageSrc,
+  sniffImageType,
 } from "./images";
 import {
   api,
@@ -1702,6 +1704,17 @@ function CardComposer({
             value={description}
             placeholder="Add context, links, or a checklist…"
             onChange={(e) => setDescription(e.target.value)}
+            onPaste={(e) => {
+              if (
+                clipboardImageCandidates(e.clipboardData).length ||
+                clipboardImageProblem(e.clipboardData)
+              ) {
+                e.preventDefault();
+                setError(
+                  "Create the card first, then paste the image into its description or a comment.",
+                );
+              }
+            }}
           />
         </label>
         <div className="section-heading">
@@ -1739,7 +1752,11 @@ function CardComposer({
           Open card after creating to add files and comments
         </label>
         {error && (
-          <p className="form-error" role="alert">
+          <p
+            className="form-error"
+            role="alert"
+            ref={(el) => el?.scrollIntoView?.({ block: "nearest" })}
+          >
             {error}
           </p>
         )}
@@ -1830,8 +1847,15 @@ function CardModal({
     e: React.ClipboardEvent<HTMLTextAreaElement>,
     apply: (value: string) => void,
   ) => {
-    const images = pastedImages(e.clipboardData.files);
-    if (!images.length) return;
+    const images = clipboardImageCandidates(e.clipboardData);
+    if (!images.length) {
+      const problem = clipboardImageProblem(e.clipboardData);
+      if (problem) {
+        e.preventDefault();
+        setError(problem);
+      }
+      return;
+    }
     e.preventDefault();
     const box = e.currentTarget,
       now = new Date();
@@ -1841,12 +1865,15 @@ function CardModal({
       setError("");
       setPasting(true);
       try {
-        const urls = await uploadFiles(
-          images.map(
-            (f, i) =>
-              new File([f], pastedImageName(f.type, now, i), { type: f.type }),
-          ),
-        );
+        const typed: File[] = [];
+        for (const [i, f] of images.entries()) {
+          const type = sniffImageType(
+            new Uint8Array(await f.slice(0, 16).arrayBuffer()),
+          );
+          if (!type) throw new Error("the clipboard item is not a supported image.");
+          typed.push(new File([f], pastedImageName(type, now, i), { type }));
+        }
+        const urls = await uploadFiles(typed);
         const r = insertSnippet(
           value,
           start,
@@ -1992,7 +2019,11 @@ function CardModal({
       wide
     >
       {error && (
-        <div className="form-error card-error" role="alert">
+        <div
+          className="form-error card-error"
+          role="alert"
+          ref={(el) => el?.scrollIntoView?.({ block: "nearest" })}
+        >
           {error}
           {error.includes("changed") && (
             <button onClick={() => void load()}>Reload latest card</button>

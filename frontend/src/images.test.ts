@@ -53,3 +53,56 @@ test("insertSnippet places images on their own line", () => {
   assert.equal(insertSnippet("ab\n", 3, 3, "X").text, "ab\nX");
   assert.equal(insertSnippet("ab cd", 2, 3, "X").text, "ab\nX\ncd");
 });
+
+import {
+  clipboardImageCandidates,
+  clipboardImageProblem,
+  sniffImageType,
+} from "./images";
+
+const file = (type: string, name = "image.png") => ({ type, name }) as File;
+const item = (kind: string, f: File | null, type = f?.type || "") => ({
+  kind,
+  type,
+  getAsFile: () => f,
+});
+
+test("clipboardImageCandidates reads files, then items", () => {
+  const png = file("image/png");
+  assert.deepEqual(clipboardImageCandidates({ files: [png], items: [item("file", png)] }), [png]);
+  // Chrome case: .files empty, image only in items
+  assert.deepEqual(clipboardImageCandidates({ files: [], items: [item("string", null, "text/html"), item("file", png)] }), [png]);
+  // untyped file is a candidate (bytes sniffed later); non-image files are not
+  const untyped = file("");
+  assert.deepEqual(clipboardImageCandidates({ files: [untyped, file("application/pdf")] }), [untyped]);
+  assert.deepEqual(clipboardImageCandidates({ files: [file("image/svg+xml")] }), []);
+  assert.deepEqual(clipboardImageCandidates(null), []);
+  assert.deepEqual(clipboardImageCandidates({ items: [item("file", null, "image/png")] }), []);
+});
+
+test("sniffImageType identifies raster signatures", () => {
+  const b = (...n: number[]) => Uint8Array.from([...n, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+  assert.equal(sniffImageType(b(0x89, 0x50, 0x4e, 0x47)), "image/png");
+  assert.equal(sniffImageType(b(0xff, 0xd8, 0xff)), "image/jpeg");
+  assert.equal(sniffImageType(b(0x47, 0x49, 0x46, 0x38)), "image/gif");
+  const webp = Uint8Array.from([..."RIFF"].map((c) => c.charCodeAt(0)).concat([0, 0, 0, 0], [..."WEBP"].map((c) => c.charCodeAt(0))));
+  assert.equal(sniffImageType(webp), "image/webp");
+  assert.equal(sniffImageType(Uint8Array.from([...("<svg>").split("").map((c) => c.charCodeAt(0))])), null);
+  assert.equal(sniffImageType(new Uint8Array(0)), null);
+});
+
+test("clipboardImageProblem flags unreadable image pastes only", () => {
+  const html = '<img src="blob:https://web.whatsapp.com/x">';
+  const dt = (types: string[], h = "", items: any[] = []) => ({
+    types,
+    items,
+    files: [],
+    getData: (t: string) => (t === "text/html" ? h : ""),
+  });
+  assert.match(clipboardImageProblem(dt(["text/html"], html)) || "", /could not be read/);
+  assert.match(clipboardImageProblem(dt(["Files"], "", [item("file", null, "image/heic")])) || "", /could not be read/);
+  assert.equal(clipboardImageProblem(dt(["text/plain", "text/html"], html)), null);
+  assert.equal(clipboardImageProblem(dt(["text/html"], "<b>hi</b>")), null);
+  assert.equal(clipboardImageProblem(dt(["Files"], "", [item("file", file("image/png"))])), null);
+  assert.equal(clipboardImageProblem(null), null);
+});
